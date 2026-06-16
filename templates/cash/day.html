@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Смена {{ date|date:"d.m.Y" }} — Сакура{% endblock %}
+{% block content %}
+<div class="page-header d-flex flex-wrap justify-content-between align-items-start gap-2">
+  <div>
+    <h1>Закрытая смена — {{ date|date:"d.m.Y" }}</h1>
+    <p class="page-subtitle mb-0">
+      Закрыта {{ cash.closed_at|date:"d.m.Y H:i" }}
+      {% if cash.closed_by %} · {{ cash.closed_by }}{% endif %}
+    </p>
+  </div>
+  <a href="{% url 'cash:closed_list' %}" class="btn btn-sakura-outline btn-sm">
+    <i class="bi bi-arrow-left"></i> Все смены
+  </a>
+</div>
+
+<div class="stat-grid">
+  <div class="stat-card stat-card--primary">
+    <div class="stat-label">Выручка</div>
+    <div class="stat-value">{{ cash.total_revenue }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Наличные</div>
+    <div class="stat-value">{{ cash.cash_revenue }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Карта</div>
+    <div class="stat-value">{{ cash.card_revenue }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Расходы</div>
+    <div class="stat-value text-danger">{{ cash.total_expenses }}</div>
+  </div>
+</div>
+
+<p class="fs-5 mb-4">
+  Прибыль:
+  <strong class="{% if cash.net_profit >= 0 %}text-success{% else %}text-danger{% endif %}">
+    {{ cash.net_profit }} сом
+  </strong>
+  · Навынос: {{ cash.takeaway_revenue }} сом
+  {% if cash.qr_revenue %} · QR: {{ cash.qr_revenue }} сом{% endif %}
+</p>
+
+<div class="panel">
+  <div class="panel-header">Расходы за день</div>
+  <div class="panel-body panel-body--flush">
+    <table class="table table-modern mb-0">
+      <thead><tr><th>Категория</th><th>Сумма</th><th>Комментарий</th></tr></thead>
+      <tbody>
+      {% for e in expenses %}
+      <tr>
+        <td>{{ e.category }}</td>
+        <td class="fw-semibold text-danger">{{ e.amount }}</td>
+        <td>{{ e.comment }}</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="3" class="text-center text-muted py-4">Нет расходов</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

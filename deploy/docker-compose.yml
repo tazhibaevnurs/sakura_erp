@@ -1,0 +1,102 @@
+services:
+  db:
+    image: postgres:16-alpine
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: ${DB_NAME:-chaihana}
+      POSTGRES_USER: ${DB_USER:-chaihana}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-chaihana_secret}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-chaihana} -d ${DB_NAME:-chaihana}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  web:
+    build:
+      context: ..
+      dockerfile: deploy/docker/Dockerfile
+    env_file: ../.env
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.prod
+    volumes:
+      - static_files:/app/staticfiles
+      - media_files:/app/media
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    expose:
+      - "8000"
+
+  daphne:
+    build:
+      context: ..
+      dockerfile: deploy/docker/Dockerfile
+    env_file: ../.env
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.prod
+    command: daphne -b 0.0.0.0 -p 8001 config.asgi:application
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    expose:
+      - "8001"
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./docker/nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - static_files:/app/staticfiles:ro
+      - media_files:/app/media:ro
+    depends_on:
+      - web
+      - daphne
+
+  celery:
+    build:
+      context: ..
+      dockerfile: deploy/docker/Dockerfile
+    env_file: ../.env
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.prod
+    command: celery -A config worker -l info
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  celery-beat:
+    build:
+      context: ..
+      dockerfile: deploy/docker/Dockerfile
+    env_file: ../.env
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.prod
+    command: celery -A config beat -l info
+    depends_on:
+      - redis
+      - celery
+
+volumes:
+  postgres_data:
+  redis_data:
+  static_files:
+  media_files:

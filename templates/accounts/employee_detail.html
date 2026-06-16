@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}{{ employee }} — Сакура{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>{{ employee }}</h1>
+  <p class="page-subtitle">{{ employee.role.name }}</p>
+</div>
+<div class="row g-4">
+  <div class="col-md-6">
+    <div class="panel">
+      <div class="panel-header">Профиль</div>
+      <div class="panel-body">
+        <p><strong>Телефон:</strong> {{ employee.phone|default:"—" }}</p>
+        <p><strong>Схема зарплаты:</strong> {{ employee.salary_schema.name }}</p>
+        <p class="mb-0"><strong>Принят:</strong> {{ employee.hired_date|date:"d.m.Y" }}</p>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="panel">
+      <div class="panel-header">Зарплата за месяц</div>
+      <div class="panel-body">
+        <div class="stat-card mb-0">
+          <div class="stat-label">К выплате</div>
+          <div class="stat-value stat-card--accent">{{ salary.net_to_pay }} сом</div>
+          <p class="small text-muted mt-2 mb-0">Отработано: {{ salary.worked_days }} дн. · Начислено: {{ salary.accrued }} сом</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

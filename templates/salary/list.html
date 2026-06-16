@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Зарплата — Сакура{% endblock %}
+{% block content %}
+<div class="page-header d-flex justify-content-between align-items-start">
+  <div>
+    <h1>Зарплата</h1>
+    <p class="page-subtitle">{{ period_start|date:"d.m.Y" }} — {{ period_end|date:"d.m.Y" }}</p>
+  </div>
+  <a href="{% url 'salary:timesheet' %}" class="btn btn-sakura-outline">Табель</a>
+</div>
+<div class="panel">
+  <div class="panel-body panel-body--flush">
+    <table class="table table-modern mb-0">
+      <thead><tr><th>Сотрудник</th><th>Дней</th><th>Начислено</th><th class="text-end">К выплате</th></tr></thead>
+      <tbody>
+      {% for row in rows %}
+      <tr>
+        <td class="fw-semibold">{{ row.employee }}</td>
+        <td>{{ row.worked_days }}</td>
+        <td>{{ row.accrued }} сом</td>
+        <td class="text-end fw-bold text-success">{{ row.net_to_pay }} сом</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

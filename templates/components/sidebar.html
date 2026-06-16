@@ -1,0 +1,62 @@
+<aside class="app-sidebar offcanvas-lg offcanvas-start" tabindex="-1" id="appSidebar" aria-label="Меню">
+  <div class="offcanvas-header d-lg-none border-secondary border-opacity-25">
+    <span class="offcanvas-title text-white fw-bold">Сакура</span>
+    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" data-bs-target="#appSidebar"></button>
+  </div>
+
+  <div class="offcanvas-body p-0 d-flex flex-column">
+    <div class="sidebar-brand d-none d-lg-block">
+      {% if user_role == 'cook' or user_role == 'baker' or user_role == 'salad' or user_role == 'bbq' %}
+        {% if user.employee.kitchen_section %}
+        <a href="{% url 'kitchen:display' section_slug=user.employee.kitchen_section.slug %}">
+          <span class="brand-icon">🌸</span>
+          <span>Сакура</span>
+        </a>
+        {% else %}
+        <a href="{% url 'tables:floor' %}">
+          <span class="brand-icon">🌸</span>
+          <span>Сакура</span>
+        </a>
+        {% endif %}
+      {% else %}
+      <a href="{% url 'tables:floor' %}">
+        <span class="brand-icon">🌸</span>
+        <span>Сакура</span>
+      </a>
+      {% endif %}
+    </div>
+
+    <nav class="sidebar-nav">
+      {% for item in nav_items %}
+        {% if item.3 %}
+        <a class="sidebar-link{% if request.resolver_match.view_name == item.0 or request.resolver_match.view_name == 'kitchen:order_detail' and item.0 == 'kitchen:completed_orders' %} active{% endif %}"
+           href="{% url item.0 section_slug=item.3.section_slug %}">
+          <i class="bi bi-{{ item.2 }}"></i>
+          <span>{{ item.1 }}</span>
+        </a>
+        {% else %}
+        <a class="sidebar-link{% if request.resolver_match.view_name == item.0 or item.0 == 'assistant:dialogs' and request.resolver_match.view_name == 'assistant:dialog_detail' %} active{% endif %}"
+           href="{% url item.0 %}">
+          <i class="bi bi-{{ item.2 }}"></i>
+          <span>{{ item.1 }}</span>
+        </a>
+        {% endif %}
+      {% endfor %}
+    </nav>
+
+    <div class="sidebar-footer mt-auto">
+      <div class="sidebar-user text-truncate">
+        <i class="bi bi-person-circle me-1"></i>
+        {{ user.get_full_name|default:user.username }}
+      </div>
+      <form method="post" action="{% url 'accounts:logout' %}" class="sidebar-logout-form">
+        {% csrf_token %}
+        <button type="submit" class="sidebar-link sidebar-logout w-100">
+          <i class="bi bi-box-arrow-right"></i>
+          <span>Выход</span>
+        </button>
+      </form>
+    </div>
+  </div>
+</aside>
+

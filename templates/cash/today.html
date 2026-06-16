@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}Касса — Сакура{% endblock %}
+{% block content %}
+<div class="page-header d-flex flex-wrap justify-content-between align-items-start gap-2">
+  <div>
+    <h1>Касса</h1>
+    <p class="page-subtitle">
+      {{ cash.date|date:"d.m.Y" }}
+      {% if is_closed %}<span class="badge bg-secondary ms-1">закрыта</span>{% else %}<span class="badge bg-success ms-1">открыта</span>{% endif %}
+    </p>
+  </div>
+  {% if not is_closed %}
+  <form method="post" class="d-inline" onsubmit="return confirm('Закрыть кассу за сегодня? Итоги перейдут в «Закрытые смены».');">
+    {% csrf_token %}
+    <button name="close_cash" class="btn btn-dark"><i class="bi bi-lock"></i> Закрыть кассу</button>
+  </form>
+  {% endif %}
+</div>
+
+{% if is_closed %}
+<div class="panel cash-empty-state">
+  <div class="panel-body text-center py-5">
+    <i class="bi bi-lock-fill display-4 text-muted"></i>
+    <h2 class="h4 mt-3 mb-2">Касса за сегодня закрыта</h2>
+    <p class="text-muted mb-4">
+      Смена завершена {{ cash.closed_at|date:"d.m.Y H:i" }}
+      {% if cash.closed_by %}· {{ cash.closed_by }}{% endif %}.
+      Новые оплаты и расходы за сегодня недоступны.
+    </p>
+    <div class="d-flex flex-wrap gap-2 justify-content-center">
+      <a href="{% url 'cash:closed_list' %}" class="btn btn-sakura">
+        <i class="bi bi-journal-check"></i> Закрытые смены
+      </a>
+      <a href="{% url 'cash:day' cash.date|date:'Y-m-d' %}" class="btn btn-sakura-outline">
+        <i class="bi bi-eye"></i> Итоги за сегодня
+      </a>
+    </div>
+  </div>
+</div>
+{% else %}
+<div class="stat-grid">
+  <div class="stat-card stat-card--primary">
+    <div class="stat-label">Выручка</div>
+    <div class="stat-value">{{ cash.total_revenue }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Наличные</div>
+    <div class="stat-value">{{ cash.cash_revenue }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Карта</div>
+    <div class="stat-value">{{ cash.card_revenue }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Расходы</div>
+    <div class="stat-value stat-card--danger">{{ cash.total_expenses }}</div>
+  </div>
+</div>
+
+<p class="fs-5 mb-4">
+  Прибыль:
+  <strong class="{% if cash.net_profit >= 0 %}text-success{% else %}text-danger{% endif %}">
+    {{ cash.net_profit }} сом
+  </strong>
+  · Навынос: {{ cash.takeaway_revenue }} сом
+</p>
+
+<div class="action-bar">
+  <a href="{% url 'cash:expense_add' %}" class="btn btn-sakura"><i class="bi bi-plus-lg"></i> Расход</a>
+  <a href="{% url 'cash:debts' %}" class="btn btn-sakura-outline">Долги</a>
+  <a href="{% url 'cash:closed_list' %}" class="btn btn-sakura-outline"><i class="bi bi-journal-check"></i> Архив смен</a>
+</div>
+
+<div class="panel">
+  <div class="panel-header">Расходы за день</div>
+  <div class="panel-body panel-body--flush">
+    <table class="table table-modern mb-0">
+      <thead><tr><th>Категория</th><th>Сумма</th><th>Комментарий</th></tr></thead>
+      <tbody>
+      {% for e in expenses %}
+      <tr><td>{{ e.category }}</td><td class="fw-semibold text-danger">{{ e.amount }}</td><td>{{ e.comment }}</td></tr>
+      {% empty %}
+      <tr><td colspan="3" class="text-center text-muted py-4">Нет расходов</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

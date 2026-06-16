@@ -1,0 +1,17 @@
+{% if order.table %}
+  <span class="fw-semibold"><i class="bi bi-columns-gap me-1"></i>{{ order.table.get_type_display }} №{{ order.table.number }}</span>
+  <small class="text-muted d-block">{{ order.table.capacity }} мест</small>
+{% elif order.order_type == 'delivery' %}
+  <span class="fw-semibold"><i class="bi bi-truck me-1"></i>{{ order.customer_name|default:"Доставка" }}</span>
+  {% if order.customer_phone %}
+  <small class="text-muted d-block"><i class="bi bi-telephone me-1"></i>{{ order.customer_phone }}{% if order.customer_phone_ext %} доб. {{ order.customer_phone_ext }}{% endif %}</small>
+  {% endif %}
+  {% if order.delivery_address %}
+  <small class="text-muted d-block">{{ order.delivery_address|truncatechars:40 }}</small>
+  {% endif %}
+{% elif order.order_type == 'takeaway' %}
+  <span class="fw-semibold"><i class="bi bi-bag me-1"></i>Навынос</span>
+{% else %}
+  <span class="text-muted">—</span>
+{% endif %}
+<small class="text-muted d-block">Официант: {{ order.waiter }}</small>

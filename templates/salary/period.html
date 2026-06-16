@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Зарплата {{ period }} — Сакура{% endblock %}
+{% block content %}
+<div class="page-header"><h1>Зарплата · {{ period }}</h1></div>
+<div class="panel">
+  <div class="panel-body panel-body--flush">
+    <table class="table table-modern mb-0">
+      <thead><tr><th>Сотрудник</th><th class="text-end">К выплате</th></tr></thead>
+      <tbody>
+      {% for row in rows %}
+      <tr><td class="fw-semibold">{{ row.employee }}</td><td class="text-end fw-bold">{{ row.net_to_pay }} сом</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% load crispy_forms_tags %}
+{% block title %}Кабинка {{ table.number }} — Сакура{% endblock %}
+{% block content %}
+<div class="action-bar">
+  <div>
+    <h1 class="h3 fw-bold mb-0">Кабинка {{ table.number }}</h1>
+    <span class="text-muted">{{ table.get_type_display }} · {{ table.capacity }} гостей</span>
+  </div>
+  <a href="{% url 'tables:floor' %}" class="btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> Кабинки</a>
+</div>
+
+<div class="row g-4">
+  <div class="col-lg-8">
+    <div class="panel">
+      <div class="panel-header"><i class="bi bi-menu-button-wide me-2"></i>Меню</div>
+      <div class="panel-body menu-grid">
+        {% regroup menu_items by category as categories %}
+        {% for cat in categories %}
+        <div class="menu-category-title">{{ cat.grouper.name }}</div>
+        <div class="row g-2">
+          {% for item in cat.list %}
+          <div class="col-md-6 col-xl-4">
+            <form method="post" class="d-grid h-100">
+              {% csrf_token %}
+              <input type="hidden" name="menu_item_id" value="{{ item.pk }}">
+              <input type="hidden" name="quantity" value="1">
+              <button type="submit" class="menu-item-btn text-start h-100">
+                <span class="d-block">{{ item.name }}</span>
+                <span class="text-muted small">{{ item.price }} сом / {{ item.get_unit_display }}</span>
+              </button>
+            </form>
+          </div>
+          {% endfor %}
+        </div>
+        {% empty %}
+        <div class="empty-state"><p>Запустите <code>python manage.py seed_menu</code></p></div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-4">
+    {% if order %}
+    <div class="panel border-primary" style="border-width: 2px !important;">
+      <div class="panel-header text-white" style="background: linear-gradient(135deg, var(--sakura-primary), #be123c); border: none;">
+        <span>Заказ #{{ order.pk }}</span>
+        <strong>{{ order.total }} сом</strong>
+      </div>
+      <ul class="list-group list-group-flush">
+        {% for item in order.items.all %}
+        <li class="list-group-item d-flex justify-content-between">
+          <span>{{ item.menu_item.name }} ×{{ item.quantity }} {{ item.menu_item.get_unit_display }}</span>
+          <span class="fw-semibold">{{ item.price }}</span>
+        </li>
+        {% endfor %}
+      </ul>
+      <div class="panel-body d-grid gap-2">
+        <a href="{% url 'orders:detail' order.pk %}" class="btn btn-sakura">Открыть заказ</a>
+        <a href="{% url 'orders:pay' order.pk %}" class="btn btn-success">Оплатить</a>
+      </div>
+    </div>
+    {% endif %}
+
+    <div class="panel">
+      <div class="panel-header">Параметры</div>
+      <div class="panel-body">
+        <form method="post">{% csrf_token %}{{ form|crispy }}
+          <button class="btn btn-sakura-outline w-100">{% if order %}Сохранить{% else %}Открыть заказ{% endif %}</button>
+        </form>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">С примечанием</div>
+      <div class="panel-body">
+        <form method="post">{% csrf_token %}<input type="hidden" name="add_item" value="1">{{ add_form|crispy }}
+          <button class="btn btn-outline-secondary w-100 mt-2">Добавить</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

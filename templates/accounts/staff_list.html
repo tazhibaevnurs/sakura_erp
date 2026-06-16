@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Персонал — Сакура{% endblock %}
+{% block content %}
+<div class="action-bar">
+  <div><h1 class="h3 fw-bold mb-0">Персонал</h1></div>
+  {% if user_role == 'owner' %}
+  <a href="{% url 'staff_add' %}" class="btn btn-sakura"><i class="bi bi-person-plus"></i> Добавить</a>
+  {% endif %}
+</div>
+<div class="panel">
+  <div class="panel-body panel-body--flush">
+    <table class="table table-modern mb-0">
+      <thead><tr><th>Имя</th><th>Роль</th><th>Телефон</th><th></th></tr></thead>
+      <tbody>
+      {% for e in employees %}
+      <tr>
+        <td class="fw-semibold">{{ e }}</td>
+        <td><span class="badge bg-light text-dark">{{ e.role.name }}</span></td>
+        <td>{{ e.phone|default:"—" }}</td>
+        <td class="text-end"><a href="{% url 'staff_detail' e.pk %}" class="btn btn-sm btn-sakura-outline">Подробнее</a></td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="4" class="text-center text-muted py-4">Нет сотрудников</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

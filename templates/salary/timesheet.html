@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% load crispy_forms_tags %}
+{% block title %}Табель — Сакура{% endblock %}
+{% block content %}
+<div class="page-header"><h1>Табель</h1></div>
+<div class="row g-4">
+  <div class="col-lg-4">
+    <div class="panel">
+      <div class="panel-header">Новая смена</div>
+      <div class="panel-body">
+        <form method="post">{% csrf_token %}{{ form|crispy }}
+          <button class="btn btn-sakura w-100">Сохранить</button>
+        </form>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-8">
+    <div class="panel">
+      <div class="panel-header">Смены за месяц</div>
+      <div class="panel-body panel-body--flush">
+        <table class="table table-modern mb-0">
+          <thead><tr><th>Дата</th><th>Сотрудник</th><th>Тип</th><th>Начислено</th></tr></thead>
+          <tbody>
+          {% for s in shifts %}
+          <tr>
+            <td>{{ s.date|date:"d.m" }}</td>
+            <td>{{ s.employee }}</td>
+            <td>{{ s.get_shift_type_display }}</td>
+            <td class="fw-semibold">
+              {% if s.shift_type == 'worked' %}
+                {{ s.calculated_salary }} сом
+                <span class="text-muted small d-block">выручка дня: {{ s.revenue_share_base }} · {{ s.employee.salary_schema.fixed_per_shift }} + {{ s.employee.salary_schema.percent_of_revenue }}%</span>
+              {% else %}—{% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

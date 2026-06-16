@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+
+{% block title %}Закрытые смены — Сакура{% endblock %}
+
+{% block content %}
+
+<div class="page-header d-flex flex-wrap justify-content-between align-items-start gap-2">
+
+  <div>
+
+    <h1>Закрытые смены</h1>
+
+    <p class="page-subtitle mb-0">Архив кассы по дням</p>
+
+  </div>
+
+  <a href="{% url 'cash:today' %}" class="btn btn-sakura-outline btn-sm">
+
+    <i class="bi bi-cash-stack"></i>
+
+    {% if today_closed %}Касса (закрыта){% else %}Текущая касса{% endif %}
+
+  </a>
+
+</div>
+
+
+
+{% if shifts %}
+
+<div class="stat-grid mb-4">
+
+  <div class="stat-card stat-card--primary">
+
+    <div class="stat-label">Всего выручка</div>
+
+    <div class="stat-value">{{ totals.revenue|default:0 }}</div>
+
+  </div>
+
+  <div class="stat-card">
+
+    <div class="stat-label">Всего расходы</div>
+
+    <div class="stat-value">{{ totals.expenses|default:0 }}</div>
+
+  </div>
+
+  <div class="stat-card">
+
+    <div class="stat-label">Всего прибыль</div>
+
+    <div class="stat-value {% if totals.profit and totals.profit < 0 %}text-danger{% else %}text-success{% endif %}">
+
+      {{ totals.profit|default:0 }}
+
+    </div>
+
+  </div>
+
+  <div class="stat-card">
+
+    <div class="stat-label">Смен</div>
+
+    <div class="stat-value">{{ shifts|length }}</div>
+
+  </div>
+
+</div>
+
+{% endif %}
+
+
+
+<div class="panel">
+
+  <div class="panel-header"><i class="bi bi-journal-check me-2"></i>История по дням</div>
+
+  <div class="panel-body panel-body--flush">
+
+    <table class="table table-modern mb-0">
+
+      <thead>
+
+        <tr>
+
+          <th>Дата</th>
+
+          <th>Выручка</th>
+
+          <th>Наличные</th>
+
+          <th>Карта</th>
+
+          <th>Расходы</th>
+
+          <th>Прибыль</th>
+
+          <th>Закрыл</th>
+
+          <th></th>
+
+        </tr>
+
+      </thead>
+
+      <tbody>
+
+      {% for s in shifts %}
+
+        <tr>
+
+          <td class="fw-semibold">{{ s.date|date:"d.m.Y" }}</td>
+
+          <td>{{ s.total_revenue }}</td>
+
+          <td>{{ s.cash_revenue }}</td>
+
+          <td>{{ s.card_revenue }}</td>
+
+          <td class="text-danger">{{ s.total_expenses }}</td>
+
+          <td class="{% if s.net_profit >= 0 %}text-success{% else %}text-danger{% endif %} fw-semibold">
+
+            {{ s.net_profit }}
+
+          </td>
+
+          <td class="small text-muted">
+
+            {% if s.closed_by %}{{ s.closed_by }}{% else %}—{% endif %}
+
+            {% if s.closed_at %}<br>{{ s.closed_at|date:"d.m H:i" }}{% endif %}
+
+          </td>
+
+          <td class="text-end">
+
+            <a href="{% url 'cash:day' s.date|date:'Y-m-d' %}" class="btn btn-sm btn-sakura-outline">Детали</a>
+
+          </td>
+
+        </tr>
+
+      {% empty %}
+
+        <tr>
+
+          <td colspan="8" class="text-center text-muted py-5">
+
+            Закрытых смен пока нет. Закройте кассу на странице «Касса».
+
+          </td>
+
+        </tr>
+
+      {% endfor %}
+
+      </tbody>
+
+    </table>
+
+  </div>
+
+</div>
+
+{% endblock %}
+

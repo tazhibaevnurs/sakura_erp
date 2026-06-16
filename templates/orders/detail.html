@@ -1,0 +1,171 @@
+{% extends "base.html" %}
+{% load crispy_forms_tags %}
+{% block title %}Заказ #{{ order.pk }} — Сакура{% endblock %}
+{% block content %}
+<div class="action-bar">
+  <div>
+    <h1 class="h3 fw-bold mb-0">Заказ #{{ order.pk }}{% if order.table %} · кабинка {{ order.table.number }}{% elif order.order_type == 'delivery' %} · доставка{% elif order.order_type == 'takeaway' %} · навынос{% endif %}</h1>
+    <span class="badge badge-status bg-secondary">{{ order.get_status_display }}</span>
+    <span class="ms-2 fs-4 fw-bold text-dark">{{ order.total }} сом</span>
+  </div>
+  <a href="{% url 'tables:floor' %}" class="btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> Кабинки</a>
+</div>
+
+<div class="row g-4">
+  <div class="col-lg-7">
+    <div class="panel">
+      <div class="panel-header">Позиции</div>
+      <div class="panel-body panel-body--flush">
+        <table class="table table-modern mb-0" id="order-items-table">
+          <thead><tr><th>Блюдо</th><th>Кол.</th><th>Цена</th><th>Статус</th></tr></thead>
+          <tbody>
+          {% for item in order.items.all %}
+          <tr data-item-id="{{ item.pk }}">
+            <td class="fw-semibold">{{ item.menu_item.name }}{% if item.note %}<br><small class="text-muted">{{ item.note }}</small>{% endif %}</td>
+            <td>{{ item.quantity }} {{ item.menu_item.get_unit_display }}</td>
+            <td>{{ item.price }}</td>
+            <td>
+              <span class="badge item-row-status {% if item.status == 'ready' %}bg-success{% elif item.status == 'cooking' %}bg-warning text-dark{% elif item.status == 'pending' %}bg-secondary{% else %}bg-light text-dark{% endif %}">
+                {{ item.get_status_display }}
+              </span>
+            </td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="4" class="text-center text-muted py-4">Добавьте блюда из формы справа</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% if user_role != 'cook' and user_role != 'baker' and user_role != 'salad' and user_role != 'bbq' %}
+    <div class="panel">
+      <div class="panel-header">Добавить блюдо</div>
+      <div class="panel-body">
+        <form method="post">{% csrf_token %}{{ add_form|crispy }}
+          <button name="add_item" class="btn btn-sakura"><i class="bi bi-plus-lg"></i> Добавить</button>
+        </form>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+  <div class="col-lg-5">
+    {% if user_role == 'waiter' or user_role == 'admin' or user_role == 'owner' %}
+    <div class="panel mb-3" id="kitchen-ready-panel">
+      <div class="panel-header">
+        <span><i class="bi bi-bell me-2"></i>Готово с кухни</span>
+        <span class="badge bg-success" id="ready-count-badge">0</span>
+      </div>
+      <div class="panel-body" id="ready-notifications">
+        <div class="empty-state py-3" id="ready-empty">
+          <i class="bi bi-hourglass-split d-block"></i>
+          <p class="mb-0 small">Ожидаем готовности с кухни</p>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+    {% if order.order_type == 'delivery' %}
+    <div class="panel mb-3">
+      <div class="panel-header"><i class="bi bi-truck me-2"></i>Доставка</div>
+      <div class="panel-body">
+        <dl class="row mb-0 small">
+          <dt class="col-sm-4">Имя</dt><dd class="col-sm-8">{{ order.customer_name }}</dd>
+          <dt class="col-sm-4">Телефон</dt>
+          <dd class="col-sm-8">{{ order.customer_phone }}{% if order.customer_phone_ext %} доб. {{ order.customer_phone_ext }}{% endif %}</dd>
+          <dt class="col-sm-4">Адрес</dt><dd class="col-sm-8">{{ order.delivery_address }}</dd>
+        </dl>
+      </div>
+    </div>
+    {% endif %}
+    {% if user_role != 'cook' and user_role != 'baker' and user_role != 'salad' and user_role != 'bbq' %}
+    <div class="panel">
+      <div class="panel-body d-grid gap-2">
+        <form method="post">{% csrf_token %}
+          <button name="send_kitchen" class="btn btn-warning w-100 py-2"><i class="bi bi-fire"></i> На кухню</button>
+        </form>
+        {% if cash_closed %}
+        <div class="alert alert-warning small mb-0 py-3 text-center">
+          <i class="bi bi-lock"></i> Касса закрыта — оплата недоступна
+        </div>
+        {% else %}
+        <a href="{% url 'orders:pay' order.pk %}" class="btn btn-success btn-lg w-100 py-3"><i class="bi bi-credit-card"></i> Оплатить</a>
+        {% endif %}
+        {% if user_role == 'admin' or user_role == 'owner' %}
+        <a href="{% url 'orders:cancel' order.pk %}" class="btn btn-outline-danger w-100">Отменить заказ</a>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<audio id="order-ready-sound" src="https://cdn.jsdelivr.net/npm/notif-sound@1.0.0/notify.mp3" preload="auto"></audio>
+{% endblock %}
+
+{% block scripts %}
+{% if user_role == 'waiter' or user_role == 'admin' or user_role == 'owner' %}
+<script>
+(function() {
+  const orderId = {{ order.pk }};
+  const initialReady = [
+    {% for item in order.items.all %}{% if item.status == 'ready' %}
+    {
+      id: {{ item.pk }},
+      menu_item: "{{ item.menu_item.name|escapejs }}",
+      quantity: "{{ item.quantity }}",
+      unit: "{{ item.menu_item.get_unit_display|escapejs }}",
+      kitchen_section: "{{ item.kitchen_section.name|escapejs }}",
+      ready_by: "{% if item.ready_by %}{{ item.ready_by|escapejs }}{% endif %}",
+      status_label: "Готово"
+    },
+    {% endif %}{% endfor %}
+  ];
+
+  const container = document.getElementById('ready-notifications');
+  const emptyEl = document.getElementById('ready-empty');
+  const countBadge = document.getElementById('ready-count-badge');
+  const seen = new Set();
+
+  function updateRowStatus(itemId, label) {
+    const row = document.querySelector(`#order-items-table tr[data-item-id="${itemId}"] .item-row-status`);
+    if (row) {
+      row.className = 'badge item-row-status bg-success';
+      row.textContent = label;
+    }
+  }
+
+  function renderAlert(data, isNew) {
+    if (seen.has(data.id)) return;
+    seen.add(data.id);
+    if (emptyEl) emptyEl.style.display = 'none';
+    const el = document.createElement('div');
+    el.className = 'order-ready-alert' + (isNew ? ' order-ready-alert--new' : '');
+    el.dataset.itemId = data.id;
+    const cook = data.ready_by ? ` · ${data.ready_by}` : '';
+    el.innerHTML = `
+      <i class="bi bi-check-circle-fill order-ready-alert__icon"></i>
+      <div>
+        <div class="order-ready-alert__title">${data.menu_item} ×${data.quantity} ${data.unit}</div>
+        <div class="order-ready-alert__meta">${data.kitchen_section}${cook}</div>
+      </div>`;
+    container.prepend(el);
+    updateRowStatus(data.id, data.status_label || 'Готово');
+    countBadge.textContent = seen.size;
+    if (isNew) {
+      document.getElementById('order-ready-sound')?.play();
+      setTimeout(() => el.classList.remove('order-ready-alert--new'), 3000);
+    }
+  }
+
+  initialReady.forEach(d => renderAlert(d, false));
+
+  const wsScheme = window.location.protocol === 'https:' ? 'wss' : 'ws';
+  const ws = new WebSocket(`${wsScheme}://${window.location.host}/ws/orders/${orderId}/`);
+  ws.onmessage = (event) => {
+    const data = JSON.parse(event.data);
+    renderAlert(data, true);
+  };
+})();
+</script>
+{% endif %}
+{% endblock %}
+

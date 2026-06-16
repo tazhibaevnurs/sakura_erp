@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}Дашборд — Сакура{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Дашборд</h1>
+  <p class="page-subtitle">Сводка за сегодня и выбранный период</p>
+</div>
+
+<div class="stat-grid">
+  <div class="stat-card stat-card--primary">
+    <div class="stat-label">Выручка сегодня</div>
+    <div class="stat-value">{{ today.revenue }} <small class="fs-6 fw-normal">сом</small></div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Расходы</div>
+    <div class="stat-value stat-card--danger">{{ today.expenses }} <small class="fs-6 fw-normal text-muted">сом</small></div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Прибыль</div>
+    <div class="stat-value stat-card--accent">{{ today.net_profit }} <small class="fs-6 fw-normal text-muted">сом</small></div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Активные заказы</div>
+    <div class="stat-value stat-card--warning">{{ today.active_orders }}</div>
+  </div>
+</div>
+
+<div class="row g-4">
+  <div class="col-lg-7">
+    <div class="panel">
+      <div class="panel-header">
+        <span><i class="bi bi-trophy me-2 text-warning"></i>Топ блюд сегодня</span>
+      </div>
+      <div class="panel-body panel-body--flush">
+        {% if today.top_items %}
+        <table class="table table-modern mb-0">
+          <thead><tr><th>Блюдо</th><th>Кол-во</th><th class="text-end">Выручка</th></tr></thead>
+          <tbody>
+          {% for item in today.top_items %}
+          <tr>
+            <td class="fw-semibold">{{ item.menu_item__name }}</td>
+            <td><span class="badge bg-light text-dark">{{ item.qty }}</span></td>
+            <td class="text-end">{{ item.revenue }} сом</td>
+          </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <div class="empty-state">
+          <i class="bi bi-cup-hot d-block"></i>
+          <p class="mb-0">Пока нет продаж за сегодня</p>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-5">
+    <div class="panel">
+      <div class="panel-header"><i class="bi bi-calendar-range me-2"></i>Период</div>
+      <div class="panel-body">
+        <form method="post">
+          {% csrf_token %}
+          <div class="row g-2 mb-3">
+            <div class="col-6">{{ filter_form.date_from.label_tag }}{{ filter_form.date_from }}</div>
+            <div class="col-6">{{ filter_form.date_to.label_tag }}{{ filter_form.date_to }}</div>
+          </div>
+          <button type="submit" class="btn btn-sakura-outline w-100 mb-3">Показать период</button>
+        </form>
+        {% if period %}
+        <div class="p-3 rounded-3" style="background: var(--sakura-primary-light);">
+          <p class="small text-muted mb-2">Итоги за период</p>
+          <div class="d-flex justify-content-between mb-1"><span>Выручка</span><strong>{{ period.revenue_total }} сом</strong></div>
+          <div class="d-flex justify-content-between mb-1"><span>Расходы</span><strong>{{ period.expenses_total }} сом</strong></div>
+          <div class="d-flex justify-content-between"><span>Прибыль</span><strong class="text-success">{{ period.net_total }} сом</strong></div>
+        </div>
+        {% endif %}
+        <a href="{% url 'reports:export' %}" class="btn btn-sakura w-100 mt-3">
+          <i class="bi bi-file-earmark-excel me-1"></i> Экспорт в Эксель
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

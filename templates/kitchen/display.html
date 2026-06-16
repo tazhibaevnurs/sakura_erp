@@ -1,0 +1,399 @@
+{% extends "base.html" %}
+
+{% block title %}Дашборд — {{ section.name }}{% endblock %}
+
+{% load static %}
+
+{% block content %}
+
+<div class="page-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+
+  <div>
+
+    <h1 class="mb-1">Дашборд</h1>
+
+    <p class="page-subtitle mb-0">{{ section.name }} — позиции в работе</p>
+
+  </div>
+
+  <span class="kitchen-count-badge" id="kitchen-count-badge">{{ items|length }} в работе</span>
+
+</div>
+
+
+
+<div class="panel mb-4">
+
+  <div class="panel-header">
+
+    <span><i class="bi bi-fire me-2"></i>В работе</span>
+
+    <span class="badge bg-light text-dark">{{ items|length }}</span>
+
+  </div>
+
+  <div class="panel-body">
+
+    <div class="row g-3" id="kitchen-items">
+
+      {% for item in items %}
+
+      <div class="col-md-6 col-lg-4 col-xl-3" data-item-id="{{ item.pk }}" data-status="{{ item.status }}">
+
+        <div class="kitchen-card p-3 {% if item.status == 'cooking' %}kitchen-card--cooking{% endif %}">
+
+          <div class="kitchen-card__head">
+
+            <span class="kitchen-card__source">
+              {% if item.order.table %}
+              <i class="bi bi-columns-gap me-1"></i>{{ item.order.table.get_type_display }} №{{ item.order.table.number }}
+              {% elif item.order.order_type == 'delivery' %}
+              <i class="bi bi-truck me-1"></i>{{ item.order.customer_name|default:"Доставка" }}
+              {% else %}
+              <i class="bi bi-bag me-1"></i>Навынос
+              {% endif %}
+            </span>
+            <span class="kitchen-card__time">{{ item.order.created_at|time:"H:i" }}</span>
+          </div>
+          <small class="kitchen-card__meta text-muted d-block mb-1">
+            {% if item.order.table %}{{ item.order.table.capacity }} мест · {% endif %}
+            {% if item.order.order_type == 'delivery' and item.order.delivery_address %}{{ item.order.delivery_address|truncatechars:28 }} · {% endif %}
+            #{{ item.order.pk }} · {{ item.order.waiter }}
+          </small>
+          <p class="kitchen-card__dish mb-0">{{ item.menu_item.name }} ×{{ item.quantity }} {{ item.menu_item.get_unit_display }}</p>
+
+          {% if item.note %}<p class="kitchen-card__note mb-0">{{ item.note }}</p>{% endif %}
+
+          <div class="kitchen-card__actions">
+
+            {% if item.status == 'pending' %}
+
+            <button class="btn btn-sakura w-100" onclick="markCooking({{ item.pk }})">Взять в работу</button>
+
+            {% else %}
+
+            <span class="badge bg-warning text-dark mb-2">Готовится</span>
+
+            <button class="btn btn-success w-100 fw-semibold" onclick="markReady({{ item.pk }})"><i class="bi bi-check-lg"></i> Готово</button>
+
+            {% endif %}
+
+          </div>
+
+        </div>
+
+      </div>
+
+      {% empty %}
+
+      <div class="col-12">
+
+        <div class="empty-state">
+
+          <i class="bi bi-check-circle d-block"></i>
+
+          <p class="mb-0">Нет позиций в работе — всё готово</p>
+
+        </div>
+
+      </div>
+
+      {% endfor %}
+
+    </div>
+
+  </div>
+
+</div>
+
+
+
+<div class="panel">
+
+  <div class="panel-header">
+
+    <span><i class="bi bi-journal-text me-2"></i>Все заказы цеха «{{ section.name }}»</span>
+
+  </div>
+
+  <div class="panel-body panel-body--flush">
+
+    <table class="table table-modern mb-0" id="kitchen-orders-table">
+
+      <thead>
+
+        <tr>
+
+          <th>№</th>
+
+          <th>Тип</th>
+
+          <th>Откуда заказ</th>
+
+          <th>Позиции</th>
+
+          <th>Статус заказа</th>
+
+          <th>Время</th>
+
+          <th></th>
+
+        </tr>
+
+      </thead>
+
+      <tbody>
+
+      {% for o in section_orders %}
+
+        <tr data-order-id="{{ o.pk }}">
+
+          <td class="fw-semibold">#{{ o.pk }}</td>
+
+          <td>{{ o.get_order_type_display }}</td>
+
+          <td>{% include "components/order_source.html" with order=o %}</td>
+
+          <td>
+
+            {% for si in o.section_items_list %}
+
+              <span class="badge item-status-badge {% if si.status == 'ready' %}bg-success{% elif si.status == 'cooking' %}bg-warning text-dark{% elif si.status == 'pending' %}bg-secondary{% else %}bg-light text-dark{% endif %} me-1 mb-1"
+
+                    data-item-id="{{ si.pk }}" data-status="{{ si.status }}">
+
+                {{ si.menu_item.name }} ×{{ si.quantity }} — {{ si.get_status_display }}
+
+              </span>
+
+            {% endfor %}
+
+          </td>
+
+          <td><span class="badge bg-secondary">{{ o.get_status_display }}</span></td>
+
+          <td class="text-nowrap">{{ o.created_at|date:"d.m. H:i" }}</td>
+
+          <td class="text-end">
+
+            <a href="{% url 'orders:detail' o.pk %}" class="btn btn-sm btn-sakura-outline">Открыть</a>
+
+          </td>
+
+        </tr>
+
+      {% empty %}
+
+        <tr>
+
+          <td colspan="7" class="text-center text-muted py-4">Нет активных заказов для этого цеха</td>
+
+        </tr>
+
+      {% endfor %}
+
+      </tbody>
+
+    </table>
+
+  </div>
+
+</div>
+
+
+
+<audio id="kitchen-sound" src="https://cdn.jsdelivr.net/npm/notif-sound@1.0.0/notify.mp3" preload="auto"></audio>
+
+{% endblock %}
+
+{% block scripts %}
+
+<script>
+
+const wsScheme = window.location.protocol === 'https:' ? 'wss' : 'ws';
+
+const ws = new WebSocket(`${wsScheme}://${window.location.host}/ws/kitchen/{{ section.slug }}/`);
+
+ws.onmessage = (event) => {
+
+  const data = JSON.parse(event.data);
+
+  document.getElementById('kitchen-sound')?.play();
+
+  addKitchenCard(data);
+
+  updateWorkCount();
+
+};
+
+function updateWorkCount() {
+
+  const n = document.querySelectorAll('#kitchen-items [data-item-id]').length;
+
+  const badge = document.getElementById('kitchen-count-badge');
+
+  if (badge) badge.textContent = n + ' в работе';
+
+}
+
+function updateTableItemStatus(id, status, label) {
+
+  const badge = document.querySelector(`#kitchen-orders-table .item-status-badge[data-item-id="${id}"]`);
+
+  if (!badge) return;
+
+  badge.dataset.status = status;
+
+  badge.className = 'badge item-status-badge me-1 mb-1 ' + (
+
+    status === 'ready' ? 'bg-success' :
+
+    status === 'cooking' ? 'bg-warning text-dark' :
+
+    status === 'pending' ? 'bg-secondary' : 'bg-light text-dark'
+
+  );
+
+  const text = badge.textContent.split(' — ')[0];
+
+  badge.textContent = text + ' — ' + label;
+
+}
+
+function orderTypeLabel(data) {
+  if (data.table_number) {
+    const t = data.table_type ? `${data.table_type} №` : '№';
+    return `<i class="bi bi-columns-gap me-1"></i>${t}${data.table_number}`;
+  }
+  if (data.order_type === 'delivery') {
+    const name = data.customer_name || 'Доставка';
+    return `<i class="bi bi-truck me-1"></i>${name}`;
+  }
+  return '<i class="bi bi-bag me-1"></i>Навынос';
+}
+
+function orderMetaLine(data) {
+  const parts = [];
+  if (data.table_capacity) parts.push(`${data.table_capacity} мест`);
+  if (data.delivery_address) parts.push(data.delivery_address);
+  if (data.order_id) parts.push(`#${data.order_id}`);
+  if (data.waiter) parts.push(data.waiter);
+  return parts.join(' · ');
+}
+
+function buildCookingCard(id) {
+
+  const card = document.querySelector(`#kitchen-items [data-item-id="${id}"]`);
+
+  if (!card) return;
+
+  card.dataset.status = 'cooking';
+
+  const inner = card.querySelector('.kitchen-card');
+
+  inner.classList.add('kitchen-card--cooking');
+
+  const head = inner.querySelector('.kitchen-card__head')?.outerHTML || '';
+
+  const dish = inner.querySelector('.kitchen-card__dish')?.outerHTML || '';
+
+  const note = inner.querySelector('.kitchen-card__note')?.outerHTML || '';
+
+  inner.innerHTML = head + dish + note +
+
+    '<div class="kitchen-card__actions">' +
+
+    '<span class="badge bg-warning text-dark mb-2">Готовится</span>' +
+
+    `<button class="btn btn-success w-100 fw-semibold" onclick="markReady(${id})"><i class="bi bi-check-lg"></i> Готово</button>` +
+
+    '</div>';
+
+}
+
+function markCooking(id) {
+
+  fetch(`/orders/api/item/${id}/cooking/`, {
+
+    method: 'POST',
+
+    headers: {'X-CSRFToken': '{{ csrf_token }}', 'Content-Type': 'application/json'},
+
+  }).then(r => r.json()).then(() => {
+
+    buildCookingCard(id);
+
+    updateTableItemStatus(id, 'cooking', 'Готовится');
+
+  });
+
+}
+
+function markReady(id) {
+
+  fetch(`/orders/api/item/${id}/ready/`, {
+
+    method: 'POST',
+
+    headers: {'X-CSRFToken': '{{ csrf_token }}', 'Content-Type': 'application/json'},
+
+  }).then(() => {
+
+    document.querySelector(`#kitchen-items [data-item-id="${id}"]`)?.remove();
+
+    updateTableItemStatus(id, 'ready', 'Готово');
+
+    updateWorkCount();
+
+  });
+
+}
+
+function addKitchenCard(data) {
+
+  if (document.querySelector(`#kitchen-items [data-item-id="${data.id}"]`)) return;
+
+  const empty = document.querySelector('#kitchen-items .empty-state');
+
+  if (empty) empty.closest('.col-12')?.remove();
+
+  const col = document.createElement('div');
+
+  col.className = 'col-md-6 col-lg-4 col-xl-3';
+
+  col.dataset.itemId = data.id;
+
+  col.dataset.status = 'pending';
+
+  const unit = data.unit || 'шт';
+
+  col.innerHTML = `<div class="kitchen-card p-3">
+
+    <div class="kitchen-card__head">
+
+      <span class="kitchen-card__source">${orderTypeLabel(data)}</span>
+
+      <span class="kitchen-card__time"></span>
+
+    </div>
+
+    <small class="kitchen-card__meta text-muted d-block mb-1">${orderMetaLine(data)}</small>
+    <p class="kitchen-card__dish mb-0">${data.menu_item} ×${data.quantity} ${unit}</p>
+
+    <div class="kitchen-card__actions">
+
+      <button class="btn btn-sakura w-100" onclick="markCooking(${data.id})">Взять в работу</button>
+
+    </div>
+
+  </div>`;
+
+  document.getElementById('kitchen-items').prepend(col);
+
+}
+
+</script>
+
+{% endblock %}
+
+

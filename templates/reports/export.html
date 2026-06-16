@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% load crispy_forms_tags %}
+{% block title %}Экспорт — Сакура{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-5">
+    <div class="panel">
+      <div class="panel-header"><i class="bi bi-file-earmark-excel me-2 text-success"></i>Экспорт отчёта</div>
+      <div class="panel-body">
+        <form method="post">{% csrf_token %}{{ form|crispy }}
+          <button class="btn btn-sakura w-100 py-2"><i class="bi bi-download"></i> Скачать Эксель</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

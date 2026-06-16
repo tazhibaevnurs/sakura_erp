@@ -1,0 +1,270 @@
+{% extends "base.html" %}
+
+{% block title %}Заказы — Сакура{% endblock %}
+
+{% block content %}
+
+<div class="page-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+
+  <div>
+
+    <h1 class="mb-1">Заказы</h1>
+
+    <p class="page-subtitle mb-0">Все заказы зала, навыноса и доставки</p>
+
+  </div>
+
+  <a href="{% url 'tables:floor' %}" class="btn btn-sakura-outline"><i class="bi bi-columns-gap"></i> Кабинки</a>
+
+</div>
+
+
+
+<ul class="nav nav-pills mb-3 gap-2 flex-wrap">
+
+  <li class="nav-item">
+
+    <a class="nav-link {% if order_filter == 'active' %}active{% endif %}" href="?filter=active">
+
+      Активные <span class="badge bg-light text-dark ms-1">{{ count_active }}</span>
+
+    </a>
+
+  </li>
+
+  <li class="nav-item">
+
+    <a class="nav-link {% if order_filter == 'closed' %}active{% endif %}" href="?filter=closed">
+
+      Закрытые <span class="badge bg-light text-dark ms-1">{{ count_closed }}</span>
+
+    </a>
+
+  </li>
+
+  <li class="nav-item">
+
+    <a class="nav-link {% if order_filter == 'all' %}active{% endif %}" href="?filter=all">
+
+      Все <span class="badge bg-light text-dark ms-1">{{ count_all }}</span>
+
+    </a>
+
+  </li>
+
+</ul>
+
+
+
+<div class="panel">
+
+  <div class="panel-body panel-body--flush">
+
+    <table class="table table-modern mb-0">
+
+      <thead>
+
+        <tr>
+
+          <th>№</th>
+
+          <th>Тип</th>
+
+          <th>Кабинка / стол</th>
+
+          <th>Официант</th>
+
+          <th>Статус</th>
+
+          <th class="text-end">Сумма</th>
+
+          <th>Создан</th>
+
+          <th></th>
+
+        </tr>
+
+      </thead>
+
+      <tbody>
+
+      {% for o in orders %}
+
+        <tr data-order-id="{{ o.pk }}"
+            class="{% if o.ready_items_count and o.ready_items_count == o.active_items_count %}order-row-ready{% elif o.ready_items_count %}order-row-partial-ready{% endif %}">
+
+          <td class="fw-semibold">#{{ o.pk }}</td>
+
+          <td>{{ o.get_order_type_display }}</td>
+
+          <td>
+            {% if o.table %}
+              <span class="fw-semibold">{{ o.table.get_type_display }} №{{ o.table.number }}</span>
+              <small class="text-muted d-block">{{ o.table.capacity }} мест</small>
+              {% if o.table_reservation %}
+              <span class="badge bg-info text-dark mt-1" title="Предзаказ по брони">бронь</span>
+              {% endif %}
+            {% elif o.order_type == 'delivery' %}
+              <span class="fw-semibold"><i class="bi bi-truck me-1"></i>{{ o.customer_name|default:"Доставка" }}</span>
+              {% if o.delivery_address %}
+              <small class="text-muted d-block">{{ o.delivery_address|truncatechars:35 }}</small>
+              {% endif %}
+            {% elif o.order_type == 'takeaway' %}
+              <span class="text-muted"><i class="bi bi-bag me-1"></i>Навынос</span>
+            {% else %}—{% endif %}
+          </td>
+
+          <td>{{ o.waiter }}</td>
+
+          <td class="order-status-cell">
+            <span class="badge order-status-badge {% if o.status == 'paid' %}bg-success{% elif o.status == 'cancelled' %}bg-secondary{% elif o.status == 'ready' or o.status == 'served' %}bg-info text-dark{% elif o.status == 'open' %}bg-light text-dark{% else %}bg-warning text-dark{% endif %}">{{ o.get_status_display }}</span>
+            {% if o.ready_items_count %}
+            <div class="order-ready-notice {% if o.ready_items_count == o.active_items_count %}order-ready-notice--full{% endif %}" data-ready-notice>
+              <i class="bi bi-bell-fill"></i>
+              {% if o.ready_items_count == o.active_items_count %}
+                Готово с кухни
+              {% else %}
+                {{ o.ready_items_count }} из {{ o.active_items_count }} готово
+              {% endif %}
+            </div>
+            {% endif %}
+          </td>
+
+          <td class="text-end fw-semibold">{{ o.total }} сом</td>
+
+          <td class="text-nowrap">{{ o.created_at|date:"d.m.Y H:i" }}</td>
+
+          <td class="text-end">
+
+            <a href="{% url 'orders:detail' o.pk %}" class="btn btn-sm btn-sakura-outline">Открыть</a>
+
+          </td>
+
+        </tr>
+
+      {% empty %}
+
+        <tr>
+
+          <td colspan="8" class="text-center text-muted py-5">
+
+            {% if order_filter == 'active' %}
+
+              Нет активных заказов.
+
+            {% elif order_filter == 'closed' %}
+
+              Нет оплаченных или отменённых заказов.
+
+            {% else %}
+
+              Заказов пока нет.
+
+            {% endif %}
+
+          </td>
+
+        </tr>
+
+      {% endfor %}
+
+      </tbody>
+
+    </table>
+
+  </div>
+
+</div>
+
+
+
+{% if page_obj.has_other_pages %}
+
+<nav class="mt-3" aria-label="Страницы заказов">
+
+  <ul class="pagination justify-content-center mb-0">
+
+    {% if page_obj.has_previous %}
+
+    <li class="page-item">
+
+      <a class="page-link" href="?filter={{ order_filter }}&page={{ page_obj.previous_page_number }}">Назад</a>
+
+    </li>
+
+    {% endif %}
+
+    <li class="page-item disabled">
+
+      <span class="page-link">{{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</span>
+
+    </li>
+
+    {% if page_obj.has_next %}
+
+    <li class="page-item">
+
+      <a class="page-link" href="?filter={{ order_filter }}&page={{ page_obj.next_page_number }}">Вперёд</a>
+
+    </li>
+
+    {% endif %}
+
+  </ul>
+
+</nav>
+
+{% endif %}
+
+<audio id="orders-list-sound" src="https://cdn.jsdelivr.net/npm/notif-sound@1.0.0/notify.mp3" preload="auto"></audio>
+{% endblock %}
+
+{% block scripts %}
+{% if user_role == 'waiter' or user_role == 'admin' or user_role == 'owner' %}
+<script>
+(function() {
+  function renderReadyNotice(data, isNew) {
+    const row = document.querySelector(`tr[data-order-id="${data.order_id}"]`);
+    if (!row) return;
+    const ready = data.ready_count || 0;
+    const total = data.total_count || 0;
+    const allReady = data.all_ready || (ready > 0 && ready === total);
+    row.classList.remove('order-row-ready', 'order-row-partial-ready');
+    if (allReady) row.classList.add('order-row-ready');
+    else if (ready > 0) row.classList.add('order-row-partial-ready');
+    const cell = row.querySelector('.order-status-cell');
+    if (!cell) return;
+    let notice = cell.querySelector('[data-ready-notice]');
+    if (ready <= 0) {
+      notice?.remove();
+      return;
+    }
+    const text = allReady
+      ? 'Готово с кухни'
+      : `${ready} из ${total} готово`;
+    if (!notice) {
+      notice = document.createElement('div');
+      notice.className = 'order-ready-notice';
+      notice.dataset.readyNotice = '';
+      cell.appendChild(notice);
+    }
+    notice.className = 'order-ready-notice' + (allReady ? ' order-ready-notice--full' : '');
+    if (isNew) {
+      notice.classList.add('order-ready-notice--new');
+      setTimeout(() => notice.classList.remove('order-ready-notice--new'), 3000);
+      document.getElementById('orders-list-sound')?.play();
+    }
+    notice.innerHTML = `<i class="bi bi-bell-fill"></i> ${text}`;
+  }
+
+  const wsScheme = window.location.protocol === 'https:' ? 'wss' : 'ws';
+  const ws = new WebSocket(`${wsScheme}://${window.location.host}/ws/orders/list/`);
+  ws.onmessage = (event) => {
+    const data = JSON.parse(event.data);
+    renderReadyNotice(data, true);
+  };
+})();
+</script>
+{% endif %}
+{% endblock %}
+

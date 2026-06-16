@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}Диалог — {{ guest_label }} — Сакура{% endblock %}
+{% block content %}
+<div class="page-header d-flex flex-wrap justify-content-between align-items-start gap-2 mb-4">
+  <div>
+    <a href="{% url 'assistant:dialogs' %}" class="small text-muted text-decoration-none d-inline-block mb-1">
+      <i class="bi bi-arrow-left"></i> Все диалоги
+    </a>
+    <h1 class="mb-1">{{ guest_label }}</h1>
+    <p class="page-subtitle mb-0">
+      <span class="badge assistant-channel-badge assistant-channel-badge--{{ channel }}">{{ channel_label }}</span>
+      <span class="ms-2">ID: {{ external_user_id }}</span>
+      <span class="ms-2">{{ message_count }} сообщ.</span>
+    </p>
+  </div>
+</div>
+
+{% if state %}
+<div class="row g-3 mb-3">
+  {% if state.ai_paused_until %}
+  <div class="col-md-6">
+    <div class="alert alert-warning small py-2 mb-0">
+      <i class="bi bi-person-workspace me-1"></i>
+      ИИ на паузе до {{ state.ai_paused_until|date:"d.m.Y H:i" }}
+      {% if state.operator_requested_at %}
+      (оператор с {{ state.operator_requested_at|date:"d.m H:i" }})
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+  {% if state.pending_order_json %}
+  <div class="col-md-6">
+    <div class="alert alert-info small py-2 mb-0">
+      <i class="bi bi-cart me-1"></i> Есть незавершённый заказ в черновике
+    </div>
+  </div>
+  {% endif %}
+  {% if state.guest_language %}
+  <div class="col-auto">
+    <span class="badge bg-secondary">Язык: {{ state.guest_language|upper }}</span>
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+
+<div class="panel">
+  <div class="panel-header">
+    <i class="bi bi-chat-square-text me-2"></i>Переписка
+  </div>
+  <div class="panel-body">
+    <div class="assistant-dialog-thread">
+      {% for log in messages %}
+      <div class="assistant-dialog-turn">
+        <div class="assistant-dialog-turn__time">{{ log.created_at|date:"d.m.Y H:i:s" }}</div>
+        <div class="assistant-msg assistant-msg--user">{{ log.user_message }}</div>
+        <div class="assistant-msg assistant-msg--bot{% if '━━' in log.assistant_reply or '🍽' in log.assistant_reply %} assistant-msg--menu{% endif %}">{{ log.assistant_reply }}</div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+{% if state and state.pending_order_json %}
+<div class="panel mt-3">
+  <div class="panel-header">Черновик заказа (JSON)</div>
+  <div class="panel-body">
+    <pre class="assistant-knowledge-pre mb-0">{{ state.pending_order_json }}</pre>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

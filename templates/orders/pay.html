@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% load crispy_forms_tags %}
+{% block title %}Оплата — Сакура{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-5">
+    <div class="panel text-center">
+      <div class="panel-body py-5">
+        <div class="mb-3"><i class="bi bi-credit-card-2-front display-4 text-success"></i></div>
+        <h1 class="h4 fw-bold">Оплата заказа #{{ order.pk }}</h1>
+        <p class="display-6 fw-bold text-dark my-3">{{ order.total }} <small class="fs-5 text-muted">сом</small></p>
+        <form method="post" class="text-start mt-4">
+          {% csrf_token %}
+          {{ form|crispy }}
+          <button type="submit" class="btn btn-success w-100 py-2 mt-2">Подтвердить оплату</button>
+          <a href="{% url 'orders:detail' order.pk %}" class="btn btn-link w-100 mt-2">Назад</a>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,225 @@
+{% extends "base.html" %}
+{% load static crispy_forms_tags %}
+{% block title %}Приём заказа — Сакура{% endblock %}
+{% block content %}
+<div class="page-header mb-4">
+  <h1 class="mb-1">Приём заказа</h1>
+  <p class="page-subtitle mb-0">Календарный день → время → стол или кабинка → заказ</p>
+</div>
+
+<nav class="calendar-order-steps mb-4" aria-label="Шаги">
+  <a href="{% url 'tables:calendar_order' %}{% if selected_date %}?date={{ selected_date|date:'Y-m-d' }}{% endif %}"
+     class="calendar-order-step{% if step == 'date' %} calendar-order-step--active{% elif selected_date %} calendar-order-step--done{% endif %}">
+    <span>1</span> День
+  </a>
+  <a href="{% if selected_date %}{% url 'tables:calendar_order' %}?step=time&date={{ selected_date|date:'Y-m-d' }}{% else %}#{% endif %}"
+     class="calendar-order-step{% if step == 'time' %} calendar-order-step--active{% elif slot %} calendar-order-step--done{% endif %}{% if not selected_date %} calendar-order-step--disabled{% endif %}">
+    <span>2</span> Время
+  </a>
+  <a href="{% if slot %}{% url 'tables:calendar_order' %}?step=table&date={{ selected_date|date:'Y-m-d' }}&start={{ time_start_str }}&end={{ time_end_str }}{% else %}#{% endif %}"
+     class="calendar-order-step{% if step == 'table' %} calendar-order-step--active{% elif selected_table %} calendar-order-step--done{% endif %}{% if not slot %} calendar-order-step--disabled{% endif %}">
+    <span>3</span> Стол
+  </a>
+  <span class="calendar-order-step{% if step == 'order' %} calendar-order-step--active{% endif %}{% if not selected_table %} calendar-order-step--disabled{% endif %}">
+    <span>4</span> Заказ
+  </span>
+</nav>
+
+{% if step == 'date' %}
+<div class="panel">
+  <div class="panel-header d-flex justify-content-between align-items-center">
+    <span><i class="bi bi-calendar3 me-2"></i>{{ month_label }}</span>
+    <div class="btn-group btn-group-sm">
+      <a href="{% url 'tables:calendar_order' %}?month={{ prev_month }}" class="btn btn-outline-secondary"><i class="bi bi-chevron-left"></i></a>
+      <a href="{% url 'tables:calendar_order' %}?month={{ next_month }}" class="btn btn-outline-secondary"><i class="bi bi-chevron-right"></i></a>
+    </div>
+  </div>
+  <div class="panel-body">
+    <div class="calendar-grid">
+      <div class="calendar-grid__head">Пн</div>
+      <div class="calendar-grid__head">Вт</div>
+      <div class="calendar-grid__head">Ср</div>
+      <div class="calendar-grid__head">Чт</div>
+      <div class="calendar-grid__head">Пт</div>
+      <div class="calendar-grid__head">Сб</div>
+      <div class="calendar-grid__head">Вс</div>
+      {% for week in weeks %}
+        {% for cell in week %}
+        {% if cell.in_month %}
+        <a href="{% url 'tables:calendar_order' %}?step=time&date={{ cell.day|date:'Y-m-d' }}"
+           class="calendar-day{% if cell.is_today %} calendar-day--today{% endif %}{% if cell.is_selected %} calendar-day--selected{% endif %}{% if cell.is_past %} calendar-day--past{% endif %}">
+          <span class="calendar-day__num">{{ cell.day.day }}</span>
+          {% if cell.count %}
+          <span class="calendar-day__badge">{{ cell.count }}</span>
+          {% endif %}
+        </a>
+        {% else %}
+        <div class="calendar-day calendar-day--muted">
+          <span class="calendar-day__num">{{ cell.day.day }}</span>
+        </div>
+        {% endif %}
+        {% endfor %}
+      {% endfor %}
+    </div>
+    <p class="text-muted small mt-3 mb-0">Выберите день. Цифра на ячейке — количество броней на этот день.</p>
+  </div>
+</div>
+
+{% elif step == 'time' %}
+<div class="reserve-layout">
+  <aside class="time-picker-panel">
+    <form method="get" action="{% url 'tables:calendar_order' %}" id="time-form">
+      <input type="hidden" name="step" value="table">
+      <input type="hidden" name="date" value="{{ selected_date|date:'Y-m-d' }}">
+      <input type="hidden" name="start" id="slot-start" value="{{ time_start_str }}">
+      <input type="hidden" name="end" id="slot-end" value="{{ time_end_str }}">
+      <div id="picker-clock"></div>
+      <div class="mb-2 mt-3">
+        <label class="form-label small">Дата</label>
+        <input type="date" class="form-control" value="{{ selected_date|date:'Y-m-d' }}" readonly>
+      </div>
+      <div class="row g-2 mb-3">
+        <div class="col-6">
+          <label class="form-label small">Начало</label>
+          <input type="time" class="form-control" id="visible-start" value="{{ time_start_str }}" step="900">
+        </div>
+        <div class="col-6">
+          <label class="form-label small">Конец</label>
+          <input type="time" class="form-control" id="visible-end" value="{{ time_end_str }}" step="900">
+        </div>
+      </div>
+      <button type="submit" class="btn btn-sakura w-100" id="time-next-btn" disabled>
+        <i class="bi bi-arrow-right"></i> Выбрать стол
+      </button>
+    </form>
+  </aside>
+
+  <div>
+    <a href="{% url 'tables:calendar_order' %}?month={{ selected_date.year }}-{{ selected_date.month|stringformat:'02d' }}" class="btn btn-outline-secondary btn-sm mb-3">
+      <i class="bi bi-arrow-left"></i> Другой день
+    </a>
+    <div class="panel">
+      <div class="panel-header"><i class="bi bi-clock me-2"></i>Брони на {{ selected_date|date:"d.m.Y" }}</div>
+      <div class="panel-body panel-body--flush">
+        <table class="table table-modern mb-0 small">
+          <thead><tr><th>Время</th><th>Стол</th><th>Гость</th></tr></thead>
+          <tbody>
+          {% for r in day_reservations %}
+            <tr>
+              <td>{{ r.reserved_for|time:"H:i" }}–{{ r.reserved_until|time:"H:i" }}</td>
+              <td>№{{ r.table.number }} ({{ r.table.get_type_display }})</td>
+              <td>{{ r.guest_name }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="3" class="text-muted py-3 text-center">На этот день броней пока нет</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% elif step == 'table' %}
+<div class="mb-3">
+  <a href="{% url 'tables:calendar_order' %}?step=time&date={{ selected_date|date:'Y-m-d' }}" class="btn btn-outline-secondary btn-sm">
+    <i class="bi bi-arrow-left"></i> Изменить время
+  </a>
+</div>
+<div class="panel mb-3">
+  <div class="panel-header">
+    <i class="bi bi-calendar-check me-2"></i>
+    {{ selected_date|date:"d.m.Y" }} · {{ time_start_str }}{% if time_end_str %}–{{ time_end_str }}{% endif %}
+  </div>
+  <div class="panel-body">
+    <p class="text-muted small mb-3">Выберите свободный стол или кабинку на это время.</p>
+    {% if available_tables %}
+    <div class="table-pick-grid">
+      {% for table in available_tables %}
+      <a href="{% url 'tables:calendar_order' %}?step=order&date={{ selected_date|date:'Y-m-d' }}&start={{ time_start_str }}&end={{ time_end_str }}&table={{ table.pk }}"
+         class="table-pick-card">
+        <span class="table-pick-card__number">{{ table.number }}</span>
+        <span class="table-pick-card__type">{{ table.get_type_display }}</span>
+        <span class="table-pick-card__seats">{{ table.capacity }} мест</span>
+      </a>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="text-center text-muted py-4">
+      <i class="bi bi-calendar-x display-6"></i>
+      <p class="mt-2 mb-0">На это время нет свободных столов. Выберите другое время.</p>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+{% elif step == 'order' %}
+<div class="mb-3">
+  <a href="{% url 'tables:calendar_order' %}?step=table&date={{ selected_date|date:'Y-m-d' }}&start={{ time_start_str }}&end={{ time_end_str }}" class="btn btn-outline-secondary btn-sm">
+    <i class="bi bi-arrow-left"></i> Другой стол
+  </a>
+</div>
+<div class="row justify-content-center">
+  <div class="col-lg-7">
+    <div class="panel">
+      <div class="panel-header"><i class="bi bi-basket me-2"></i>Оформить заказ</div>
+      <div class="panel-body">
+        <dl class="row small mb-4 calendar-order-summary">
+          <dt class="col-sm-4">День</dt>
+          <dd class="col-sm-8">{{ selected_date|date:"d.m.Y" }}</dd>
+          <dt class="col-sm-4">Время</dt>
+          <dd class="col-sm-8">{{ time_start_str }}{% if time_end_str %} – {{ time_end_str }}{% endif %}</dd>
+          <dt class="col-sm-4">Стол</dt>
+          <dd class="col-sm-8 fw-semibold">№{{ selected_table.number }} · {{ selected_table.get_type_display }} ({{ selected_table.capacity }} мест)</dd>
+        </dl>
+        <p class="text-muted small">Будет создана бронь на выбранное время и открыт предзаказ — добавьте блюда и отправьте на кухню.</p>
+        <form method="post" novalidate>
+          {% csrf_token %}
+          {{ form|crispy }}
+          <div class="d-grid gap-2 mt-4">
+            <button type="submit" class="btn btn-sakura btn-lg py-2">
+              <i class="bi bi-check-lg"></i> Принять заказ
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if step == 'time' %}
+<script src="{% static 'js/sakura-clock.js' %}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const booked = {{ booked_slots_json|safe }};
+  const visibleStart = document.getElementById('visible-start');
+  const visibleEnd = document.getElementById('visible-end');
+  const slotStart = document.getElementById('slot-start');
+  const slotEnd = document.getElementById('slot-end');
+  const nextBtn = document.getElementById('time-next-btn');
+
+  const syncHidden = () => {
+    slotStart.value = visibleStart.value || '';
+    slotEnd.value = visibleEnd.value || '';
+    nextBtn.disabled = !(visibleStart.value && visibleEnd.value && visibleEnd.value > visibleStart.value);
+  };
+
+  const dateInput = { value: '{{ selected_date|date:"Y-m-d" }}', addEventListener: () => {} };
+  SakuraClock.mountPicker(document.getElementById('picker-clock'), {
+    bookedSlots: booked,
+    dateInput,
+    startInput: visibleStart,
+    endInput: visibleEnd,
+    onChange: syncHidden,
+  });
+
+  visibleStart.addEventListener('change', syncHidden);
+  visibleEnd.addEventListener('change', syncHidden);
+  syncHidden();
+});
+</script>
+{% endif %}
+{% endblock %}

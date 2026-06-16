@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}Кабинка {{ table.number }} — Сакура{% endblock %}
+{% block content %}
+<div class="page-header">
+  <a href="{% url 'tables:floor' %}" class="btn btn-outline-secondary btn-sm mb-3"><i class="bi bi-arrow-left"></i> Кабинки</a>
+  <h1 class="mb-1">Кабинка {{ table.number }}</h1>
+  <p class="page-subtitle mb-0">{{ table.get_type_display }} · {{ table.capacity }} мест</p>
+</div>
+
+<div class="row g-4">
+  <div class="col-lg-5">
+    <div class="panel">
+      <div class="panel-header">Действия</div>
+      <div class="panel-body d-grid gap-2">
+        {% if active_order %}
+        <p class="text-muted small mb-0">Сейчас открыт заказ.</p>
+        <a href="{% url 'orders:detail' active_order.pk %}" class="btn btn-sakura btn-lg">
+          <i class="bi bi-receipt"></i> Заказ #{{ active_order.pk }}
+        </a>
+        {% else %}
+        <a href="{% url 'orders:create' table.pk %}" class="btn btn-sakura btn-lg">
+          <i class="bi bi-plus-circle"></i> Открыть заказ сейчас
+        </a>
+        {% endif %}
+        <a href="{% url 'tables:reserve' table.pk %}" class="btn btn-outline-primary btn-lg">
+          <i class="bi bi-calendar-plus"></i> Забронировать на время
+        </a>
+        {% if reservation %}
+        <a href="{% url 'tables:reservation_detail' reservation.pk %}" class="btn btn-info text-white">
+          <i class="bi bi-hourglass-split"></i> Текущая бронь: {{ reservation.guest_name }}
+        </a>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-7">
+    <div class="panel">
+      <div class="panel-header"><i class="bi bi-calendar3 me-2"></i>Расписание броней</div>
+      <div class="panel-body panel-body--flush">
+        <table class="table table-modern mb-0">
+          <thead>
+            <tr><th>Гость</th><th>Интервал</th><th>Гостей</th><th></th></tr>
+          </thead>
+          <tbody>
+          {% for r in upcoming %}
+            <tr>
+              <td class="fw-semibold">{{ r.guest_name }}</td>
+              <td>{{ r.time_range_display }}</td>
+              <td>{{ r.guest_count }}</td>
+              <td class="text-end">
+                <a href="{% url 'tables:reservation_detail' r.pk %}" class="btn btn-sm btn-sakura-outline">Открыть</a>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="4" class="text-center text-muted py-4">Нет будущих броней — можно добавить несколько на разное время.</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

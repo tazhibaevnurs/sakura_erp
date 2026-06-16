@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Меню — Сакура{% endblock %}
+{% block content %}
+<div class="action-bar">
+  <div><h1 class="h3 fw-bold mb-0">Меню</h1></div>
+  <a href="{% url 'menu:item_add' %}" class="btn btn-sakura"><i class="bi bi-plus-lg"></i> Блюдо</a>
+</div>
+{% for cat in categories %}
+<div class="panel">
+  <div class="panel-header">
+    <span>{{ cat.name }}</span>
+    <small class="text-muted fw-normal">{{ cat.kitchen_section.name }}</small>
+  </div>
+  <div class="panel-body panel-body--flush">
+    <table class="table table-modern mb-0">
+      <tbody>
+      {% for item in cat.items.all %}
+      <tr>
+        <td class="fw-semibold">{{ item.name }}</td>
+        <td><strong>{{ item.price }}</strong> сом / {{ item.get_unit_display }}</td>
+        <td>{% if not item.is_available %}<span class="badge bg-secondary">нет в наличии</span>{% endif %}</td>
+        <td class="text-end"><a href="{% url 'menu:item_edit' item.pk %}" class="btn btn-sm btn-sakura-outline">Изменить</a></td>
+      </tr>
+      {% empty %}
+      <tr><td class="text-muted py-3">Нет блюд</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endfor %}
+{% endblock %}

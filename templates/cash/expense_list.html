@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Расходы — Сакура{% endblock %}
+{% block content %}
+<div class="action-bar">
+  <div><h1 class="h3 fw-bold mb-0">Расходы</h1></div>
+  <a href="{% url 'cash:expense_add' %}" class="btn btn-sakura"><i class="bi bi-plus-lg"></i> Добавить</a>
+</div>
+<div class="panel">
+  <div class="panel-body panel-body--flush">
+    <table class="table table-modern mb-0">
+      <thead><tr><th>Дата</th><th>Категория</th><th>Сумма</th><th>Комментарий</th></tr></thead>
+      <tbody>
+      {% for e in expenses %}
+      <tr><td>{{ e.date|date:"d.m.Y" }}</td><td>{{ e.category }}</td><td class="fw-semibold">{{ e.amount }}</td><td>{{ e.comment }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

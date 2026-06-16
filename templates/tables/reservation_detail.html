@@ -1,0 +1,182 @@
+{% extends "base.html" %}
+
+{% block title %}Бронь — кабинка {{ reservation.table.number }} — Сакура{% endblock %}
+
+{% block content %}
+
+<div class="row justify-content-center">
+
+  <div class="col-lg-7">
+
+    <a href="{% url 'tables:floor' %}" class="btn btn-outline-secondary btn-sm mb-3"><i class="bi bi-arrow-left"></i> Кабинки</a>
+
+
+
+    <div class="panel">
+
+      <div class="panel-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+
+        <span><i class="bi bi-calendar-check me-2"></i>Бронь #{{ reservation.pk }}</span>
+
+        <span class="badge {% if reservation.status == 'active' %}bg-info{% else %}bg-secondary{% endif %}">
+
+          {{ reservation.get_status_display }}
+
+        </span>
+
+      </div>
+
+      <div class="panel-body">
+
+        <div class="reservation-steps mb-4">
+
+          <div class="reservation-step reservation-step--done"><span>1</span> Бронь создана</div>
+
+          <div class="reservation-step {% if reservation.status == 'active' and not reservation.has_preorder %}reservation-step--current{% elif reservation.has_preorder %}reservation-step--done{% endif %}"><span>2</span> Ожидание гостя</div>
+
+          <div class="reservation-step {% if reservation.has_preorder %}reservation-step--current{% endif %}"><span>3</span> {% if reservation.has_preorder %}Предзаказ{% else %}Собрать заказ{% endif %}</div>
+
+        </div>
+
+
+
+        <dl class="row mb-4">
+
+          <dt class="col-sm-4">Кабинка</dt>
+
+          <dd class="col-sm-8 fw-semibold">{{ reservation.table.number }} ({{ reservation.table.get_type_display }})</dd>
+
+          <dt class="col-sm-4">Гость</dt>
+
+          <dd class="col-sm-8">{{ reservation.guest_name }}</dd>
+
+          <dt class="col-sm-4">Телефон</dt>
+
+          <dd class="col-sm-8">{{ reservation.guest_phone|default:"—" }}</dd>
+
+          <dt class="col-sm-4">Гостей</dt>
+
+          <dd class="col-sm-8">{{ reservation.guest_count }}</dd>
+
+          <dt class="col-sm-4">Время</dt>
+
+          <dd class="col-sm-8 fw-semibold">{{ reservation.time_range_display }}</dd>
+
+          <dt class="col-sm-4">Оформил</dt>
+
+          <dd class="col-sm-8">{{ reservation.created_by }}</dd>
+
+          {% if reservation.comment %}
+
+          <dt class="col-sm-4">Комментарий</dt>
+
+          <dd class="col-sm-8">{{ reservation.comment }}</dd>
+
+          {% endif %}
+
+          {% if reservation.has_preorder %}
+
+          <dt class="col-sm-4">Предзаказ</dt>
+
+          <dd class="col-sm-8">
+
+            <a href="{% url 'orders:detail' reservation.order.pk %}">Заказ #{{ reservation.order.pk }}</a>
+
+          </dd>
+
+          {% endif %}
+
+        </dl>
+
+
+
+        {% if reservation.status == 'active' %}
+
+        {% if not reservation.can_mark_arrival and not reservation.has_preorder %}
+
+        <p class="alert alert-info small mb-3">
+
+          Бронь ещё не началась. «Гость пришёл» станет доступно за 30 минут до начала.
+
+          Создайте предзаказ — блюда можно отправить на кухню заранее.
+
+        </p>
+
+        {% elif reservation.has_preorder and not reservation.can_mark_arrival %}
+
+        <p class="alert alert-info small mb-3">
+
+          Предзаказ открыт. Добавьте блюда и нажмите «На кухню». «Гость пришёл» — за 30 минут до начала (или раньше, если в заказе уже есть позиции).
+
+        </p>
+
+        {% endif %}
+
+        <div class="d-grid gap-2">
+
+          {% if reservation.has_preorder %}
+
+          <a href="{% url 'orders:detail' reservation.order.pk %}" class="btn btn-sakura btn-lg w-100 py-3">
+
+            <i class="bi bi-basket"></i> Открыть предзаказ — добавить блюда
+
+          </a>
+
+          {% else %}
+
+          <form method="post" action="{% url 'tables:reservation_preorder' reservation.pk %}">
+
+            {% csrf_token %}
+
+            <button type="submit" class="btn btn-sakura btn-lg w-100 py-3">
+
+              <i class="bi bi-basket"></i> Создать предзаказ к приходу
+
+            </button>
+
+          </form>
+
+          {% endif %}
+
+          {% if reservation.can_mark_arrival %}
+
+          <form method="post" action="{% url 'tables:reservation_arrive' reservation.pk %}">
+
+            {% csrf_token %}
+
+            <button type="submit" class="btn btn-sakura-outline btn-lg w-100 py-3">
+
+              <i class="bi bi-door-open"></i> Гость пришёл
+
+            </button>
+
+          </form>
+
+          {% endif %}
+
+          <form method="post" action="{% url 'tables:reservation_cancel' reservation.pk %}" onsubmit="return confirm('Отменить бронь?');">
+
+            {% csrf_token %}
+
+            <button type="submit" class="btn btn-outline-danger w-100">Отменить бронь</button>
+
+          </form>
+
+        </div>
+
+        {% else %}
+
+        <a href="{% url 'tables:floor' %}" class="btn btn-sakura-outline w-100">На схему кабинок</a>
+
+        {% endif %}
+
+      </div>
+
+    </div>
+
+  </div>
+
+</div>
+
+{% endblock %}
+

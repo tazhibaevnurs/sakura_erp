@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% load crispy_forms_tags %}
+{% block title %}Новый расход — Сакура{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-6">
+    <div class="panel">
+      <div class="panel-header">Новый расход</div>
+      <div class="panel-body">
+        <form method="post">{% csrf_token %}{{ form|crispy }}
+          <button class="btn btn-sakura w-100">Сохранить</button>
+          <a href="{% url 'cash:expenses' %}" class="btn btn-link w-100">Отмена</a>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

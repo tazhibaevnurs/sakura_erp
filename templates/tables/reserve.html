@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% load static crispy_forms_tags %}
+{% block title %}Бронь кабинки {{ table.number }} — Сакура{% endblock %}
+{% block content %}
+<a href="{% url 'tables:booth' table.pk %}" class="btn btn-outline-secondary btn-sm mb-3"><i class="bi bi-arrow-left"></i> Назад</a>
+
+<div class="reserve-layout">
+  <aside class="time-picker-panel">
+    <div id="picker-clock"></div>
+  </aside>
+
+  <div>
+    <div class="panel mb-3">
+      <div class="panel-header"><i class="bi bi-calendar3 me-2"></i>Занято (кабинка {{ table.number }})</div>
+      <div class="panel-body panel-body--flush">
+        <table class="table table-modern mb-0 small">
+          <thead><tr><th>Интервал</th><th>Гость</th></tr></thead>
+          <tbody>
+          {% for r in existing_reservations %}
+            <tr>
+              <td>{{ r.time_range_display }}</td>
+              <td>{{ r.guest_name }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="2" class="text-muted py-3 text-center">На выбранную дату слотов нет — весь день свободен</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header"><i class="bi bi-calendar-plus me-2"></i>Новая бронь</div>
+      <div class="panel-body">
+        <p class="text-muted small">Укажите дату и время в полях формы. На шкале слева красным отмечены занятые интервалы.</p>
+        <form method="post" novalidate id="reserve-form">
+          {% csrf_token %}
+          {{ form|crispy }}
+          <div class="d-grid gap-2 mt-4">
+            <button type="submit" class="btn btn-sakura btn-lg py-2">
+              <i class="bi bi-check-lg"></i> Забронировать
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="{% static 'js/sakura-clock.js' %}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const booked = {{ booked_slots_json|safe }};
+  const dateInput = document.getElementById('id_reserved_date');
+  const startInput = document.getElementById('id_reserved_time_start');
+  const endInput = document.getElementById('id_reserved_time_end');
+
+  SakuraClock.mountPicker(document.getElementById('picker-clock'), {
+    bookedSlots: booked,
+    dateInput,
+    startInput,
+    endInput,
+  });
+});
+</script>
+{% endblock %}

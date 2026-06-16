@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Долги — Сакура{% endblock %}
+{% block content %}
+<div class="action-bar">
+  <div><h1 class="h3 fw-bold mb-0">Долги</h1></div>
+  <a href="{% url 'cash:debt_add' %}" class="btn btn-sakura"><i class="bi bi-plus-lg"></i> Добавить</a>
+</div>
+<div class="panel">
+  <div class="panel-body panel-body--flush">
+    <table class="table table-modern mb-0">
+      <thead><tr><th>Контрагент</th><th>Направление</th><th>Сумма</th><th>Остаток</th><th>Статус</th></tr></thead>
+      <tbody>
+      {% for d in debts %}
+      <tr>
+        <td class="fw-semibold">{{ d.debtor_name }}</td>
+        <td>{{ d.get_direction_display }}</td>
+        <td>{{ d.amount }}</td>
+        <td class="fw-bold">{{ d.remaining }}</td>
+        <td><span class="badge bg-light text-dark">{{ d.get_status_display }}</span></td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Заказ #{{ order.pk }} — {{ section.name }}{% endblock %}
+{% block content %}
+<div class="page-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+  <div>
+    <h1 class="mb-1">Заказ #{{ order.pk }}</h1>
+    <p class="page-subtitle mb-0">
+      <span class="badge bg-secondary">{{ order.get_status_display }}</span>
+      <span class="ms-2 fw-semibold">{{ order.total }} сом</span>
+      · {{ section.name }}
+    </p>
+  </div>
+  <a href="{% url 'kitchen:completed_orders' section_slug=section.slug %}" class="btn btn-sakura-outline">
+    <i class="bi bi-arrow-left"></i> Мои заказы
+  </a>
+</div>
+
+<div class="row g-4">
+  <div class="col-lg-7">
+    <div class="panel">
+      <div class="panel-header">Ваши позиции ({{ section.name }})</div>
+      <div class="panel-body panel-body--flush">
+        <table class="table table-modern mb-0">
+          <thead><tr><th>Блюдо</th><th>Кол.</th><th>Цена</th><th>Статус</th></tr></thead>
+          <tbody>
+          {% for item in section_items %}
+          <tr>
+            <td class="fw-semibold">{{ item.menu_item.name }}{% if item.note %}<br><small class="text-muted">{{ item.note }}</small>{% endif %}</td>
+            <td>{{ item.quantity }} {{ item.menu_item.get_unit_display }}</td>
+            <td>{{ item.price }}</td>
+            <td><span class="badge bg-light text-dark">{{ item.get_status_display }}</span></td>
+          </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-5">
+    <div class="panel">
+      <div class="panel-header">Информация о заказе</div>
+      <div class="panel-body">
+        <dl class="row mb-0">
+          <dt class="col-sm-5">Тип</dt><dd class="col-sm-7">{{ order.get_order_type_display }}</dd>
+          {% if order.table %}
+          <dt class="col-sm-5">Кабинка</dt><dd class="col-sm-7">{{ order.table.number }}</dd>
+          {% endif %}
+          <dt class="col-sm-5">Официант</dt><dd class="col-sm-7">{{ order.waiter }}</dd>
+          <dt class="col-sm-5">Создан</dt><dd class="col-sm-7">{{ order.created_at|date:"d.m.Y H:i" }}</dd>
+          {% if order.order_type == 'delivery' %}
+          <dt class="col-sm-5">Клиент</dt><dd class="col-sm-7">{{ order.customer_name }}</dd>
+          <dt class="col-sm-5">Телефон</dt>
+          <dd class="col-sm-7">{{ order.customer_phone }}{% if order.customer_phone_ext %} доб. {{ order.customer_phone_ext }}{% endif %}</dd>
+          <dt class="col-sm-5">Адрес</dt><dd class="col-sm-7">{{ order.delivery_address }}</dd>
+          {% endif %}
+          {% if order.comment %}
+          <dt class="col-sm-5">Комментарий</dt><dd class="col-sm-7">{{ order.comment }}</dd>
+          {% endif %}
+        </dl>
+      </div>
+    </div>
+    <a href="{% url 'orders:detail' order.pk %}" class="btn btn-sakura w-100">Полный заказ</a>
+  </div>
+</div>
+{% endblock %}

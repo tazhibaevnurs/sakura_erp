@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% load crispy_forms_tags %}
+{% block title %}Доставка — Сакура{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Доставка</h1>
+  <p class="page-subtitle">Заказы с доставкой на адрес</p>
+</div>
+
+<div class="row g-4">
+  <div class="col-lg-5">
+    <div class="panel">
+      <div class="panel-header"><i class="bi bi-truck me-2"></i>Активные заказы</div>
+      <div class="panel-body panel-body--flush">
+        <div class="list-group list-group-flush">
+        {% for o in orders %}
+          <a href="{% url 'orders:detail' o.pk %}" class="list-group-item list-group-item-action py-3">
+            <div class="d-flex justify-content-between align-items-center">
+              <span class="fw-semibold">#{{ o.pk }} — {{ o.total }} сом</span>
+              <span class="badge bg-secondary">{{ o.get_status_display }}</span>
+            </div>
+            <small class="text-muted d-block">{{ o.customer_name }} · {{ o.delivery_address|truncatechars:40 }}</small>
+          </a>
+        {% empty %}
+          <div class="empty-state"><i class="bi bi-truck d-block"></i><p>Нет активных заказов</p></div>
+        {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+  {% if user_role != 'cook' and user_role != 'baker' and user_role != 'salad' and user_role != 'bbq' %}
+  <div class="col-lg-7">
+    <div class="panel">
+      <div class="panel-header">Новая доставка</div>
+      <div class="panel-body">
+        <form method="post" novalidate>
+          {% csrf_token %}
+          <div class="row g-3 mb-3">
+            <div class="col-md-6">{{ form.customer_name|as_crispy_field }}</div>
+            <div class="col-md-6">{{ form.customer_phone|as_crispy_field }}</div>
+            <div class="col-md-6">{{ form.customer_phone_ext|as_crispy_field }}</div>
+            <div class="col-12">{{ form.delivery_address|as_crispy_field }}</div>
+          </div>
+          <label class="form-label fw-semibold">Блюдо</label>
+          <select name="menu_item_id" class="form-select mb-3" required>
+            {% regroup menu_items by category as cat_list %}
+            {% for cat in cat_list %}
+            <optgroup label="{{ cat.grouper.name }}">
+              {% for item in cat.list %}
+              <option value="{{ item.pk }}">{{ item.name }} — {{ item.price }} сом / {{ item.get_unit_display }}</option>
+              {% endfor %}
+            </optgroup>
+            {% endfor %}
+          </select>
+          <label class="form-label fw-semibold">Количество</label>
+          <input type="number" name="quantity" value="1" min="0.001" step="0.001" class="form-control mb-3">
+          <button type="submit" class="btn btn-sakura w-100 py-2"><i class="bi bi-plus-circle"></i> Создать / добавить</button>
+        </form>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
+
