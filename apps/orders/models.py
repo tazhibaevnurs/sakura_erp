@@ -68,6 +68,17 @@ class Order(models.Model):
         max_length=10, blank=True, verbose_name="Добавочный номер"
     )
     delivery_address = models.TextField(blank=True, verbose_name="Адрес доставки")
+    deposit = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        verbose_name="Задаток",
+    )
+    estimated_ready_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Примерная готовность",
+    )
     comment = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     paid_at = models.DateTimeField(null=True, blank=True)
@@ -96,6 +107,55 @@ class Order(models.Model):
         )
         self.total = total
         self.save(update_fields=["total"])
+
+    def kitchen_display_status(self):
+        """Статус для официанта по позициям на кухне."""
+        items = self.items.exclude(status=OrderItem.Status.CANCELLED)
+        if not items.exists():
+            return self.get_status_display()
+        if items.filter(status=OrderItem.Status.COOKING).exists():
+            return "Готовится"
+        if items.filter(status=OrderItem.Status.READY).exists():
+            if items.filter(
+                status__in=[OrderItem.Status.PENDING, OrderItem.Status.COOKING]
+            ).exists():
+                return "Частично готово"
+            return "Готово"
+        if self.status == Order.Status.SENT:
+            return "На кухне"
+        return self.get_status_display()
+
+    def requires_ready_at(self):
+        return self.order_type in (
+            self.OrderType.TAKEAWAY,
+            self.OrderType.DELIVERY,
+        )
+
+    def requires_guest_fields(self):
+        return self.requires_ready_at()
+
+    def guest_fields_complete(self):
+        if not self.requires_guest_fields():
+            return True
+        if not self.customer_name.strip():
+            return False
+        if not self.customer_phone.strip():
+            return False
+        if self.order_type == self.OrderType.DELIVERY and not self.delivery_address.strip():
+            return False
+        if self.deposit <= 0:
+            return False
+        if not self.estimated_ready_at:
+            return False
+        return True
+
+    def can_send_to_kitchen(self):
+        items = self.items.exclude(status=OrderItem.Status.CANCELLED)
+        if not items.exists():
+            return False
+        if self.requires_guest_fields():
+            return self.guest_fields_complete()
+        return True
 
 
 class OrderItem(models.Model):

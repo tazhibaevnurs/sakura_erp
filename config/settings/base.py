@@ -44,11 +44,40 @@ INSTALLED_APPS = [
     "apps.cash",
     "apps.salary",
     "apps.reports",
-    "apps.assistant",
+    "apps.ai_assistant",
 ]
 
 ASSISTANT_AI_API_KEY = env("ASSISTANT_AI_API_KEY", default="")
 ASSISTANT_GEMINI_API_KEY = env("ASSISTANT_GEMINI_API_KEY", default="")
+
+AI_ASSISTANT = {
+    "PROVIDER": env("AI_PROVIDER", default="gemini"),
+    "GEMINI_API_KEY": env("GEMINI_API_KEY", default=env("ASSISTANT_GEMINI_API_KEY", default="")),
+    "OPENAI_API_KEY": env("OPENAI_API_KEY", default=env("ASSISTANT_AI_API_KEY", default="")),
+    "OPENAI_BASE_URL": env("OPENAI_BASE_URL", default=""),
+    "OPENROUTER_HTTP_REFERER": env("OPENROUTER_HTTP_REFERER", default=""),
+    "MODEL": env("AI_MODEL", default="gemini-2.5-flash"),
+    "MAX_TOKENS": 500,
+    "TEMPERATURE": 0.7,
+    "HISTORY_LIMIT": 15,
+    "FALLBACK_PHONE": env("BUSINESS_PHONE", default=""),
+    "BUSINESS_NAME": env("BUSINESS_NAME", default="Сакура"),
+    "BUSINESS_ADDRESS": env("BUSINESS_ADDRESS", default=""),
+    "BUSINESS_HOURS": env("BUSINESS_HOURS", default="Ежедневно 10:00–23:00"),
+    "BUSINESS_PROMOTIONS": env("BUSINESS_PROMOTIONS", default=""),
+    "DELIVERY_INFO": env("BUSINESS_DELIVERY_INFO", default=""),
+    "BOOKING_INFO": env("BUSINESS_BOOKING_INFO", default=""),
+}
+
+TELEGRAM_BOT_TOKEN = env("TELEGRAM_BOT_TOKEN", default="")
+TELEGRAM_WEBHOOK_SECRET = env("TELEGRAM_WEBHOOK_SECRET", default="")
+
+WHATSAPP_ACCESS_TOKEN = env("WHATSAPP_ACCESS_TOKEN", default="")
+WHATSAPP_PHONE_NUMBER_ID = env("WHATSAPP_PHONE_NUMBER_ID", default="")
+WHATSAPP_VERIFY_TOKEN = env("WHATSAPP_VERIFY_TOKEN", default="sakura_verify")
+
+META_APP_SECRET = env("META_APP_SECRET", default="")
+INSTAGRAM_VERIFY_TOKEN = env("INSTAGRAM_VERIFY_TOKEN", default="sakura_ig")
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",

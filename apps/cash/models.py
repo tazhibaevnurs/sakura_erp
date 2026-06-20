@@ -79,6 +79,7 @@ class Expense(models.Model):
         TRANSFER = "transfer", "Перевод"
 
     date = models.DateField()
+    expense_time = models.TimeField(verbose_name="Время", null=True, blank=True)
     category = models.ForeignKey(ExpenseCategory, on_delete=models.PROTECT)
     amount = models.DecimalField(max_digits=12, decimal_places=2)
     comment = models.TextField()

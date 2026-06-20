@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+{% block title %}Настройки — ИИ-ассистент{% endblock %}
+{% block content %}
+<div class="action-bar">
+  <div>
+    <a href="{% url 'ai_assistant:dashboard' %}" class="small text-muted text-decoration-none d-inline-block mb-1">← ИИ-ассистент</a>
+    <h1 class="h3 fw-bold mb-0">Настройки</h1>
+    <p class="text-muted small mb-0">Системный промпт, информация о ресторане, webhook</p>
+  </div>
+  <a href="{% url 'ai_assistant:dialogs' %}" class="btn btn-sakura-outline btn-sm"><i class="bi bi-chat-left-text"></i> Диалоги</a>
+  <a href="{% url 'ai_assistant:test_chat' %}" class="btn btn-sakura-outline btn-sm"><i class="bi bi-chat-dots"></i> Тест</a>
+</div>
+
+<form method="post" class="row g-4">
+  {% csrf_token %}
+  <input type="hidden" name="action" value="save_config">
+
+  <div class="col-lg-7">
+    <div class="panel">
+      <div class="panel-header"><i class="bi bi-robot me-2"></i>Системный промпт и ресторан</div>
+      <div class="panel-body">
+        <div class="form-check form-switch mb-3">
+          {{ config_form.is_enabled }}
+          <label class="form-check-label" for="{{ config_form.is_enabled.id_for_label }}">Ассистент включён</label>
+        </div>
+
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label class="form-label small">{{ config_form.restaurant_name.label }}</label>
+            {{ config_form.restaurant_name }}
+          </div>
+          <div class="col-md-6">
+            <label class="form-label small">{{ config_form.restaurant_phone.label }}</label>
+            {{ config_form.restaurant_phone }}
+          </div>
+          <div class="col-12">
+            <label class="form-label small">{{ config_form.restaurant_address.label }}</label>
+            {{ config_form.restaurant_address }}
+          </div>
+          <div class="col-12">
+            <label class="form-label small">{{ config_form.working_hours.label }}</label>
+            {{ config_form.working_hours }}
+          </div>
+          <div class="col-12">
+            <label class="form-label small">{{ config_form.about_restaurant.label }}</label>
+            {{ config_form.about_restaurant }}
+          </div>
+          <div class="col-md-6">
+            <label class="form-label small">{{ config_form.delivery_info.label }}</label>
+            {{ config_form.delivery_info }}
+          </div>
+          <div class="col-md-6">
+            <label class="form-label small">{{ config_form.booking_info.label }}</label>
+            {{ config_form.booking_info }}
+          </div>
+          <div class="col-12">
+            <label class="form-label small">{{ config_form.promotions.label }}</label>
+            {{ config_form.promotions }}
+          </div>
+          <div class="col-12">
+            <label class="form-label small">{{ config_form.welcome_message.label }}</label>
+            {{ config_form.welcome_message }}
+            <div class="form-text">Сообщение при /start в Telegram</div>
+          </div>
+          <div class="col-12">
+            <label class="form-label small fw-semibold">{{ config_form.custom_system_prompt.label }}</label>
+            {{ config_form.custom_system_prompt }}
+            <div class="form-text">{{ config_form.custom_system_prompt.help_text }}</div>
+          </div>
+        </div>
+
+        <button type="submit" class="btn btn-sakura mt-3">
+          <i class="bi bi-check-lg"></i> Сохранить настройки
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-5">
+    <div class="panel mb-3">
+      <div class="panel-header"><i class="bi bi-shield-lock me-2"></i>Базовый промпт (не редактируется)</div>
+      <div class="panel-body">
+        <p class="small text-muted mb-2">Всегда включены: ограничения безопасности, JSON-формат, правила заказов и брони.</p>
+        <pre class="small bg-light p-2 rounded mb-0" style="max-height:180px;overflow:auto;white-space:pre-wrap">{{ base_prompt_preview }}</pre>
+      </div>
+    </div>
+
+    <div class="panel mb-3">
+      <div class="panel-header"><i class="bi bi-eye me-2"></i>Предпросмотр итогового промпта</div>
+      <div class="panel-body">
+        <pre class="small bg-light p-2 rounded mb-0" style="max-height:220px;overflow:auto;white-space:pre-wrap">{{ prompt_preview }}</pre>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header"><i class="bi bi-key me-2"></i>Ключи (.env)</div>
+      <div class="panel-body">
+        <table class="table table-sm mb-0">
+          <tbody>
+            <tr><td class="text-muted">Провайдер</td><td>{{ status.provider }} · {{ status.model }}</td></tr>
+            <tr><td class="text-muted">Gemini</td><td>{% if status.gemini_configured %}<span class="badge bg-success">OK</span> <code>{{ status.gemini_key_masked }}</code>{% else %}<span class="badge bg-secondary">—</span>{% endif %}</td></tr>
+            <tr><td class="text-muted">OpenAI</td><td>{% if status.openai_configured %}<span class="badge bg-success">OK</span>{% else %}<span class="badge bg-secondary">—</span>{% endif %}</td></tr>
+            <tr><td class="text-muted">Telegram</td><td><code>{{ status.telegram_token_masked }}</code></td></tr>
+            <tr><td class="text-muted">Публичный URL</td><td>{{ status.public_url }}</td></tr>
+            <tr><td class="text-muted">Celery</td><td>{% if status.celery_eager %}Локально{% else %}Сервер{% endif %}</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</form>
+
+<div class="row g-4 mt-1">
+  <div class="col-lg-6">
+    <div class="panel">
+      <div class="panel-header"><i class="bi bi-telegram me-2"></i>Telegram webhook</div>
+      <div class="panel-body">
+        <p class="small text-muted">Ожидаемый URL:</p>
+        <p class="small font-monospace bg-light p-2 rounded">{{ status.expected_webhook }}</p>
+        {% if status.telegram_webhook.url %}
+        <p class="small mb-1">Текущий:</p>
+        <p class="small font-monospace bg-light p-2 rounded">{{ status.telegram_webhook.url }}</p>
+        {% elif status.telegram_webhook.error %}
+        <div class="alert alert-danger py-2 small">{{ status.telegram_webhook.error }}</div>
+        {% else %}
+        <div class="alert alert-warning py-2 small">Webhook не установлен</div>
+        {% endif %}
+        <form method="post" class="mt-3">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="register_webhook">
+          <button type="submit" class="btn btn-sakura-outline btn-sm" {% if not status.telegram_configured or status.public_url == '—' %}disabled{% endif %}>
+            Подключить webhook
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+  #id_custom_system_prompt, #id_welcome_message,
+  #id_restaurant_address, #id_working_hours,
+  #id_about_restaurant, #id_delivery_info,
+  #id_booking_info, #id_promotions {
+    width: 100%;
+    font-size: 0.875rem;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--bs-border-color);
+    border-radius: 0.375rem;
+  }
+  #id_restaurant_name, #id_restaurant_phone { width: 100%; }
+</style>
+{% endblock %}

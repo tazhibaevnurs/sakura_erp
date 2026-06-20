@@ -1,54 +1,156 @@
 {% extends "base.html" %}
+{% load static %}
 {% block title %}Навынос — Сакура{% endblock %}
 {% block content %}
 <div class="page-header">
   <h1>Навынос</h1>
-  <p class="page-subtitle">Заказы без столика</p>
+  <p class="page-subtitle">Заказы без столика · задаток и время готовности обязательны</p>
 </div>
 
 <div class="row g-4">
   <div class="col-lg-5">
-    <div class="panel">
-      <div class="panel-header"><i class="bi bi-bag me-2"></i>Активные заказы</div>
-      <div class="panel-body panel-body--flush">
-        <div class="list-group list-group-flush">
-        {% for o in orders %}
-          <a href="{% url 'orders:detail' o.pk %}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center py-3">
-            <span class="fw-semibold">#{{ o.pk }} — {{ o.total }} сом</span>
-            <span class="badge bg-secondary">{{ o.get_status_display }}</span>
-          </a>
-        {% empty %}
-          <div class="empty-state"><i class="bi bi-bag d-block"></i><p>Нет активных заказов</p></div>
-        {% endfor %}
+    <div class="panel" id="takeaway-list-panel">
+      <div class="panel-header"><i class="bi bi-bag me-2"></i>Заказы</div>
+      <div class="panel-body panel-body--flush" id="takeaway-list-root">
+        <div id="takeaway-date-tabs"></div>
+        <div class="list-group list-group-flush" id="takeaway-orders-list">
+          <div class="empty-state py-4"><p class="mb-0">Загрузка…</p></div>
         </div>
       </div>
     </div>
   </div>
+
   {% if user_role != 'cook' and user_role != 'baker' and user_role != 'salad' and user_role != 'bbq' %}
   <div class="col-lg-7">
     <div class="panel">
-      <div class="panel-header">Новая позиция</div>
+      <div class="panel-header">Новый заказ на вынос</div>
       <div class="panel-body">
-        <form method="post">
-          {% csrf_token %}
-          <label class="form-label fw-semibold">Блюдо</label>
-          <select name="menu_item_id" class="form-select mb-3" required>
-            {% regroup menu_items by category as cat_list %}
-            {% for cat in cat_list %}
-            <optgroup label="{{ cat.grouper.name }}">
-              {% for item in cat.list %}
-              <option value="{{ item.pk }}">{{ item.name }} — {{ item.price }} сом / {{ item.get_unit_display }}</option>
-              {% endfor %}
-            </optgroup>
-            {% endfor %}
-          </select>
-          <label class="form-label fw-semibold">Количество</label>
-          <input type="number" name="quantity" value="1" min="0.001" step="0.001" class="form-control mb-3">
-          <button type="submit" class="btn btn-sakura w-100 py-2"><i class="bi bi-plus-circle"></i> Создать / добавить</button>
-        </form>
+        {% csrf_token %}
+        <div class="row g-3 mb-3">
+          <div class="col-md-6">
+            <label class="form-label fw-semibold">Имя клиента *</label>
+            <input type="text" class="form-control" id="tw-customer-name" required>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label fw-semibold">Телефон *</label>
+            <input type="text" class="form-control" id="tw-customer-phone" required>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label fw-semibold">Задаток (сом) *</label>
+            <input type="number" class="form-control" id="tw-deposit" min="1" step="100" value="500" required>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label fw-semibold">Дата готовности *</label>
+            <input type="date" class="form-control" id="tw-ready-date" value="{{ today }}" required>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label fw-semibold">Время *</label>
+            <input type="time" class="form-control" id="tw-ready-time" step="300" required>
+          </div>
+        </div>
+
+        <div class="row g-4">
+          <div class="col-lg-7">
+            <label class="form-label fw-semibold">Меню по категориям</label>
+            <div class="menu-grid" id="tw-menu"></div>
+          </div>
+          <div class="col-lg-5">
+            <div class="panel border">
+              <div class="panel-header py-2">Корзина <span class="badge bg-secondary" id="tw-cart-total">0 сом</span></div>
+              <div class="panel-body" id="tw-cart"></div>
+            </div>
+            <button type="button" class="btn btn-sakura w-100 py-2 mt-3" id="tw-submit">
+              <i class="bi bi-check-lg"></i> Принять заказ
+            </button>
+            <div class="alert alert-success small mt-2 d-none" id="tw-success"></div>
+            <div class="alert alert-danger small mt-2 d-none" id="tw-error"></div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
   {% endif %}
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{% static 'js/order-menu.js' %}"></script>
+<script src="{% static 'js/date-tabs.js' %}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', async () => {
+  const listEl = document.getElementById('takeaway-orders-list');
+  const loadOrders = async (dateKey) => {
+    listEl.innerHTML = '<div class="text-center text-muted py-4">Загрузка…</div>';
+    const resp = await fetch(`{% url 'orders:api_takeaway_list' %}?date=${encodeURIComponent(dateKey)}`);
+    const data = await resp.json();
+    if (!data.orders.length) {
+      listEl.innerHTML = '<div class="empty-state py-4"><i class="bi bi-bag d-block"></i><p>Нет заказов</p></div>';
+      return;
+    }
+    listEl.innerHTML = data.orders.map(o => `
+      <a href="${o.detail_url}" class="list-group-item list-group-item-action py-3">
+        <div class="d-flex justify-content-between align-items-start">
+          <div>
+            <div class="fw-semibold">#${o.id} · ${o.customer_name || '—'}</div>
+            <small class="text-muted d-block">Заказ: ${o.created_at}</small>
+            <small class="text-muted d-block">Готовность: ${o.estimated_ready_at || '—'}</small>
+            <small class="text-muted d-block">Тел: ${o.customer_phone || '—'} · Задаток: ${o.deposit} сом</small>
+          </div>
+          <div class="text-end">
+            <span class="badge bg-secondary">${o.status_label}</span>
+            <div class="fw-bold mt-1">${o.total} сом</div>
+          </div>
+        </div>
+      </a>`).join('');
+  };
+
+  let reloadOrders = () => loadOrders('today');
+  SakuraDateTabs.mount(document.getElementById('takeaway-date-tabs'), {
+    onLoad: (dateKey) => { reloadOrders = () => loadOrders(dateKey); loadOrders(dateKey); },
+    defaultDate: 'today',
+  });
+
+  const cart = SakuraOrderMenu.createCart();
+  const menuEl = document.getElementById('tw-menu');
+  const cartEl = document.getElementById('tw-cart');
+  const totalEl = document.getElementById('tw-cart-total');
+  const refreshCart = () => {
+    SakuraOrderMenu.renderCart(cartEl, cart, refreshCart);
+    totalEl.textContent = cart.total().toFixed(0) + ' сом';
+  };
+
+  const categories = await SakuraOrderMenu.fetchMenu('{% url "orders:api_menu" %}');
+  SakuraOrderMenu.mountMenu(menuEl, categories, (item) => { cart.add(item); refreshCart(); });
+  refreshCart();
+
+  document.getElementById('tw-submit')?.addEventListener('click', async () => {
+    const err = document.getElementById('tw-error');
+    const ok = document.getElementById('tw-success');
+    err.classList.add('d-none');
+    ok.classList.add('d-none');
+    try {
+      const result = await SakuraOrderMenu.postJSON('{% url "orders:api_takeaway" %}', {
+        customer_name: document.getElementById('tw-customer-name').value.trim(),
+        customer_phone: document.getElementById('tw-customer-phone').value.trim(),
+        deposit: document.getElementById('tw-deposit').value,
+        ready_date: document.getElementById('tw-ready-date').value,
+        ready_time: document.getElementById('tw-ready-time').value,
+        items: cart.payload(),
+      });
+      ok.textContent = `Заказ #${result.order_id} принят (${result.total} сом). Можно принять следующий.`;
+      ok.classList.remove('d-none');
+      document.getElementById('tw-customer-name').value = '';
+      document.getElementById('tw-customer-phone').value = '';
+      document.getElementById('tw-ready-time').value = '';
+      cart.clear();
+      refreshCart();
+      reloadOrders();
+      ok.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    } catch (e) {
+      err.textContent = e.message;
+      err.classList.remove('d-none');
+    }
+  });
+});
+</script>
 {% endblock %}

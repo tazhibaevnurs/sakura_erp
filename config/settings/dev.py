@@ -3,7 +3,13 @@ from .base import *  # noqa: F403
 DEBUG = True
 ALLOWED_HOSTS = ["*"]
 
-# Локальная разработка без Docker: SQLite + in-memory вместо Redis
+# =============================================================================
+# ЛОКАЛЬНАЯ РАЗРАБОТКА
+# SQLite + in-memory — Redis, PostgreSQL и Celery worker не нужны.
+# ИИ-ассистент: webhook → process_incoming_message.delay() выполняется сразу.
+# Запуск: .\run-local.ps1
+# =============================================================================
+
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
@@ -23,6 +29,7 @@ CHANNEL_LAYERS = {
     }
 }
 
+# Celery синхронный — Redis не используется, worker не запускаем
 CELERY_TASK_ALWAYS_EAGER = True
 CELERY_TASK_EAGER_PROPAGATES = True
 

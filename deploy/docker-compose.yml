@@ -30,6 +30,8 @@ services:
     env_file: ../.env
     environment:
       DJANGO_SETTINGS_MODULE: config.settings.prod
+      RUN_BOOTSTRAP: "1"
+      CREATE_SUPERUSER: ${CREATE_SUPERUSER:-0}
     volumes:
       - static_files:/app/staticfiles
       - media_files:/app/media
@@ -40,6 +42,18 @@ services:
         condition: service_healthy
     expose:
       - "8000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/')",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
   daphne:
     build:
@@ -48,6 +62,7 @@ services:
     env_file: ../.env
     environment:
       DJANGO_SETTINGS_MODULE: config.settings.prod
+      RUN_BOOTSTRAP: "0"
     command: daphne -b 0.0.0.0 -p 8001 config.asgi:application
     depends_on:
       db:
@@ -66,8 +81,10 @@ services:
       - static_files:/app/staticfiles:ro
       - media_files:/app/media:ro
     depends_on:
-      - web
-      - daphne
+      web:
+        condition: service_healthy
+      daphne:
+        condition: service_started
 
   celery:
     build:
@@ -76,11 +93,14 @@ services:
     env_file: ../.env
     environment:
       DJANGO_SETTINGS_MODULE: config.settings.prod
+      RUN_BOOTSTRAP: "0"
     command: celery -A config worker -l info
     depends_on:
       db:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      web:
         condition: service_healthy
 
   celery-beat:
@@ -90,10 +110,13 @@ services:
     env_file: ../.env
     environment:
       DJANGO_SETTINGS_MODULE: config.settings.prod
+      RUN_BOOTSTRAP: "0"
     command: celery -A config beat -l info
     depends_on:
-      - redis
-      - celery
+      redis:
+        condition: service_healthy
+      celery:
+        condition: service_started
 
 volumes:
   postgres_data:

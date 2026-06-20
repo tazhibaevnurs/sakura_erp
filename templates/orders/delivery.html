@@ -1,61 +1,76 @@
 {% extends "base.html" %}
-{% load crispy_forms_tags %}
+{% load static %}
 {% block title %}Доставка — Сакура{% endblock %}
 {% block content %}
 <div class="page-header">
   <h1>Доставка</h1>
-  <p class="page-subtitle">Заказы с доставкой на адрес</p>
+  <p class="page-subtitle">Заказы с доставкой · все поля обязательны перед отправкой на кухню</p>
 </div>
 
 <div class="row g-4">
   <div class="col-lg-5">
     <div class="panel">
-      <div class="panel-header"><i class="bi bi-truck me-2"></i>Активные заказы</div>
+      <div class="panel-header"><i class="bi bi-truck me-2"></i>Заказы</div>
       <div class="panel-body panel-body--flush">
-        <div class="list-group list-group-flush">
-        {% for o in orders %}
-          <a href="{% url 'orders:detail' o.pk %}" class="list-group-item list-group-item-action py-3">
-            <div class="d-flex justify-content-between align-items-center">
-              <span class="fw-semibold">#{{ o.pk }} — {{ o.total }} сом</span>
-              <span class="badge bg-secondary">{{ o.get_status_display }}</span>
-            </div>
-            <small class="text-muted d-block">{{ o.customer_name }} · {{ o.delivery_address|truncatechars:40 }}</small>
-          </a>
-        {% empty %}
-          <div class="empty-state"><i class="bi bi-truck d-block"></i><p>Нет активных заказов</p></div>
-        {% endfor %}
-        </div>
+        <div id="delivery-date-tabs"></div>
+        <div class="list-group list-group-flush" id="delivery-orders-list"></div>
       </div>
     </div>
   </div>
+
   {% if user_role != 'cook' and user_role != 'baker' and user_role != 'salad' and user_role != 'bbq' %}
   <div class="col-lg-7">
     <div class="panel">
       <div class="panel-header">Новая доставка</div>
       <div class="panel-body">
-        <form method="post" novalidate>
-          {% csrf_token %}
-          <div class="row g-3 mb-3">
-            <div class="col-md-6">{{ form.customer_name|as_crispy_field }}</div>
-            <div class="col-md-6">{{ form.customer_phone|as_crispy_field }}</div>
-            <div class="col-md-6">{{ form.customer_phone_ext|as_crispy_field }}</div>
-            <div class="col-12">{{ form.delivery_address|as_crispy_field }}</div>
+        {% csrf_token %}
+        <div class="row g-3 mb-3">
+          <div class="col-md-6">
+            <label class="form-label fw-semibold">Имя *</label>
+            <input type="text" class="form-control" id="dl-customer-name" required>
           </div>
-          <label class="form-label fw-semibold">Блюдо</label>
-          <select name="menu_item_id" class="form-select mb-3" required>
-            {% regroup menu_items by category as cat_list %}
-            {% for cat in cat_list %}
-            <optgroup label="{{ cat.grouper.name }}">
-              {% for item in cat.list %}
-              <option value="{{ item.pk }}">{{ item.name }} — {{ item.price }} сом / {{ item.get_unit_display }}</option>
-              {% endfor %}
-            </optgroup>
-            {% endfor %}
-          </select>
-          <label class="form-label fw-semibold">Количество</label>
-          <input type="number" name="quantity" value="1" min="0.001" step="0.001" class="form-control mb-3">
-          <button type="submit" class="btn btn-sakura w-100 py-2"><i class="bi bi-plus-circle"></i> Создать / добавить</button>
-        </form>
+          <div class="col-md-6">
+            <label class="form-label fw-semibold">Телефон *</label>
+            <input type="text" class="form-control" id="dl-customer-phone" required>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label fw-semibold">Добавочный</label>
+            <input type="text" class="form-control" id="dl-customer-ext">
+          </div>
+          <div class="col-12">
+            <label class="form-label fw-semibold">Адрес доставки *</label>
+            <textarea class="form-control" id="dl-address" rows="2" required></textarea>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label fw-semibold">Задаток (сом) *</label>
+            <input type="number" class="form-control" id="dl-deposit" min="1" step="100" value="500" required>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label fw-semibold">Дата готовности *</label>
+            <input type="date" class="form-control" id="dl-ready-date" value="{{ today }}" required>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label fw-semibold">Время *</label>
+            <input type="time" class="form-control" id="dl-ready-time" step="300" required>
+          </div>
+        </div>
+
+        <div class="row g-4">
+          <div class="col-lg-7">
+            <label class="form-label fw-semibold">Меню по категориям</label>
+            <div class="menu-grid" id="dl-menu"></div>
+          </div>
+          <div class="col-lg-5">
+            <div class="panel border">
+              <div class="panel-header py-2">Корзина <span class="badge bg-secondary" id="dl-cart-total">0 сом</span></div>
+              <div class="panel-body" id="dl-cart"></div>
+            </div>
+            <button type="button" class="btn btn-sakura w-100 py-2 mt-3" id="dl-submit">
+              <i class="bi bi-check-lg"></i> Принять заказ
+            </button>
+            <div class="alert alert-danger small mt-2 d-none" id="dl-error"></div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -63,3 +78,76 @@
 </div>
 {% endblock %}
 
+{% block scripts %}
+<script src="{% static 'js/order-menu.js' %}"></script>
+<script src="{% static 'js/date-tabs.js' %}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', async () => {
+  const listEl = document.getElementById('delivery-orders-list');
+  const loadOrders = async (dateKey) => {
+    listEl.innerHTML = '<div class="text-center text-muted py-4">Загрузка…</div>';
+    const resp = await fetch(`{% url 'orders:api_delivery_list' %}?date=${encodeURIComponent(dateKey)}`);
+    const data = await resp.json();
+    if (!data.orders.length) {
+      listEl.innerHTML = '<div class="empty-state py-4"><i class="bi bi-truck d-block"></i><p>Нет заказов</p></div>';
+      return;
+    }
+    listEl.innerHTML = data.orders.map(o => `
+      <a href="${o.detail_url}" class="list-group-item list-group-item-action py-3">
+        <div class="d-flex justify-content-between align-items-start">
+          <div>
+            <div class="fw-semibold">#${o.id} · ${o.customer_name}</div>
+            <small class="text-muted d-block">${o.delivery_address}</small>
+            <small class="text-muted d-block">Заказ: ${o.created_at} · Готовность: ${o.estimated_ready_at || '—'}</small>
+            <small class="text-muted d-block">Тел: ${o.customer_phone}${o.customer_phone_ext ? ' доб.' + o.customer_phone_ext : ''} · Задаток: ${o.deposit} сом</small>
+          </div>
+          <div class="text-end">
+            <span class="badge bg-secondary">${o.status_label}</span>
+            <div class="fw-bold mt-1">${o.total} сом</div>
+          </div>
+        </div>
+      </a>`).join('');
+  };
+
+  SakuraDateTabs.mount(document.getElementById('delivery-date-tabs'), {
+    onLoad: loadOrders,
+    defaultDate: 'today',
+  });
+
+  const cart = SakuraOrderMenu.createCart();
+  const cartEl = document.getElementById('dl-cart');
+  const totalEl = document.getElementById('dl-cart-total');
+  const refreshCart = () => {
+    SakuraOrderMenu.renderCart(cartEl, cart, refreshCart);
+    totalEl.textContent = cart.total().toFixed(0) + ' сом';
+  };
+
+  const categories = await SakuraOrderMenu.fetchMenu('{% url "orders:api_menu" %}');
+  SakuraOrderMenu.mountMenu(document.getElementById('dl-menu'), categories, (item) => {
+    cart.add(item); refreshCart();
+  });
+  refreshCart();
+
+  document.getElementById('dl-submit')?.addEventListener('click', async () => {
+    const err = document.getElementById('dl-error');
+    err.classList.add('d-none');
+    try {
+      const result = await SakuraOrderMenu.postJSON('{% url "orders:api_delivery" %}', {
+        customer_name: document.getElementById('dl-customer-name').value.trim(),
+        customer_phone: document.getElementById('dl-customer-phone').value.trim(),
+        customer_phone_ext: document.getElementById('dl-customer-ext').value.trim(),
+        delivery_address: document.getElementById('dl-address').value.trim(),
+        deposit: document.getElementById('dl-deposit').value,
+        ready_date: document.getElementById('dl-ready-date').value,
+        ready_time: document.getElementById('dl-ready-time').value,
+        items: cart.payload(),
+      });
+      window.location.href = `/orders/${result.order_id}/`;
+    } catch (e) {
+      err.textContent = e.message;
+      err.classList.remove('d-none');
+    }
+  });
+});
+</script>
+{% endblock %}

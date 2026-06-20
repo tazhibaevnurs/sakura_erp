@@ -35,7 +35,7 @@
           <span>{{ item.1 }}</span>
         </a>
         {% else %}
-        <a class="sidebar-link{% if request.resolver_match.view_name == item.0 or item.0 == 'assistant:dialogs' and request.resolver_match.view_name == 'assistant:dialog_detail' %} active{% endif %}"
+        <a class="sidebar-link{% if request.resolver_match.namespace == 'ai_assistant' and item.0 == 'ai_assistant:dashboard' or request.resolver_match.view_name == item.0 %} active{% endif %}"
            href="{% url item.0 %}">
           <i class="bi bi-{{ item.2 }}"></i>
           <span>{{ item.1 }}</span>

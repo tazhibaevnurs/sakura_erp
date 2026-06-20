@@ -10,6 +10,7 @@ from apps.cash.services import update_daily_cash_for_date
 from apps.tables.models import Table
 
 from .models import Order, OrderItem
+from .order_status import sync_order_kitchen_status
 
 logger = logging.getLogger("chaihana.finance")
 
@@ -160,4 +161,8 @@ def order_item_status_change(sender, instance, **kwargs):
     prev = getattr(instance, "_previous_status", None)
     if instance.status == OrderItem.Status.READY and prev != OrderItem.Status.READY:
         _notify_order_item_ready(instance)
+    if instance.status == OrderItem.Status.COOKING and prev != OrderItem.Status.COOKING:
+        sync_order_kitchen_status(instance.order)
+    if instance.status == OrderItem.Status.READY:
+        sync_order_kitchen_status(instance.order)
     instance.order.recalculate_total()

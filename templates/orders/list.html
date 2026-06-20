@@ -24,6 +24,16 @@
 
   <li class="nav-item">
 
+    <a class="nav-link {% if order_filter == 'today' %}active{% endif %}" href="?filter=today">
+
+      Сегодня <span class="badge bg-light text-dark ms-1">{{ count_today }}</span>
+
+    </a>
+
+  </li>
+
+  <li class="nav-item">
+
     <a class="nav-link {% if order_filter == 'active' %}active{% endif %}" href="?filter=active">
 
       Активные <span class="badge bg-light text-dark ms-1">{{ count_active }}</span>
@@ -110,7 +120,13 @@
               <small class="text-muted d-block">{{ o.delivery_address|truncatechars:35 }}</small>
               {% endif %}
             {% elif o.order_type == 'takeaway' %}
-              <span class="text-muted"><i class="bi bi-bag me-1"></i>Навынос</span>
+              <span class="fw-semibold"><i class="bi bi-bag me-1"></i>{{ o.customer_name|default:"Навынос" }}</span>
+              {% if o.customer_phone %}
+              <small class="text-muted d-block">{{ o.customer_phone }}</small>
+              {% endif %}
+              {% if o.estimated_ready_at %}
+              <small class="text-muted d-block">Готовность: {{ o.estimated_ready_at|date:"d.m H:i" }}</small>
+              {% endif %}
             {% else %}—{% endif %}
           </td>
 
@@ -148,7 +164,11 @@
 
           <td colspan="8" class="text-center text-muted py-5">
 
-            {% if order_filter == 'active' %}
+            {% if order_filter == 'today' %}
+
+              Сегодня заказов пока нет.
+
+            {% elif order_filter == 'active' %}
 
               Нет активных заказов.
 

@@ -32,9 +32,7 @@ NAV_ITEMS = {
 
         ("menu:manage", "Меню", "book"),
 
-        ("assistant:dialogs", "Диалоги", "chat-left-text"),
-
-        ("assistant:settings", "ИИ-ассистент", "robot"),
+        ("ai_assistant:dashboard", "ИИ-ассистент", "robot"),
 
     ],
 
@@ -64,9 +62,7 @@ NAV_ITEMS = {
 
         ("menu:manage", "Меню", "book"),
 
-        ("assistant:dialogs", "Диалоги", "chat-left-text"),
-
-        ("assistant:settings", "ИИ-ассистент", "robot"),
+        ("ai_assistant:dashboard", "ИИ-ассистент", "robot"),
 
     ],
 

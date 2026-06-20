@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+{% block title %}Диалог #{{ conversation.pk }} — ИИ-ассистент{% endblock %}
+{% block content %}
+<div class="action-bar">
+  <div>
+    <a href="{% url 'ai_assistant:dialogs' %}" class="small text-muted text-decoration-none d-inline-block mb-1">← Все диалоги</a>
+    <h1 class="h3 fw-bold mb-1">Диалог #{{ conversation.pk }}</h1>
+    <div class="d-flex flex-wrap align-items-center gap-2">
+      <span class="badge assistant-channel-badge--{{ conversation.channel }}">{{ conversation.get_channel_display }}</span>
+      <span class="badge assistant-status-badge--{{ conversation.status }}">{{ conversation.get_status_display }}</span>
+      {% if conversation.current_intent %}
+      <span class="badge bg-light text-dark border">{{ intent_label }}</span>
+      {% endif %}
+      <span class="small text-muted">{{ message_count }} сообщ.</span>
+    </div>
+  </div>
+  <form method="post" action="{% url 'ai_assistant:dialog_status' conversation.pk %}" class="d-flex flex-wrap gap-2 align-items-center">
+    {% csrf_token %}
+    <label class="small text-muted mb-0">Статус:</label>
+    <select name="status" class="form-select form-select-sm" style="width:auto; min-width: 11rem">
+      {% for val, label in status_choices %}
+      <option value="{{ val }}" {% if conversation.status == val %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit" class="btn btn-sakura-outline btn-sm">Сохранить</button>
+  </form>
+</div>
+
+<div class="row g-4">
+  <div class="col-lg-8 order-lg-1 order-2">
+    <div class="panel">
+      <div class="panel-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-chat-left-text me-2"></i>Переписка</span>
+        <span class="small text-muted">с {{ conversation.created_at|date:"d.m.Y H:i" }}</span>
+      </div>
+      <div class="panel-body">
+        {% if messages_list %}
+        <div class="assistant-dialog-detail-thread">
+          {% for msg in messages_list %}
+          <div class="assistant-test-turn assistant-test-turn--{% if msg.role == 'user' %}user{% else %}bot{% endif %}">
+            <div class="d-flex align-items-center gap-2 mb-1 {% if msg.role == 'user' %}justify-content-end{% endif %}">
+              <span class="small fw-semibold text-muted">
+                {% if msg.role == 'user' %}
+                  <i class="bi bi-person-fill"></i> Клиент
+                {% elif msg.role == 'assistant' %}
+                  <i class="bi bi-robot"></i> Ассистент
+                {% else %}
+                  <i class="bi bi-gear"></i> Система
+                {% endif %}
+              </span>
+            </div>
+            <div class="assistant-msg assistant-msg--{% if msg.role == 'user' %}user{% else %}bot{% endif %}">{{ msg.content }}</div>
+            <div class="assistant-msg__meta">
+              {{ msg.created_at|date:"d.m.Y H:i" }}
+              {% if msg.intent_detected %} · {{ msg.intent_detected }}{% endif %}
+              {% if msg.tokens_used %} · {{ msg.tokens_used }} tok{% endif %}
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty-state py-4">
+          <i class="bi bi-chat-dots d-block"></i>
+          <p class="mb-0">Сообщений пока нет</p>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-4 order-lg-2 order-1">
+    <div class="panel mb-3">
+      <div class="panel-header"><i class="bi bi-person me-2"></i>Клиент</div>
+      <div class="panel-body">
+        <dl class="assistant-dialog-meta-list mb-0">
+          <dt>Имя</dt>
+          <dd class="fw-semibold">{{ conversation.client.name|default:"—" }}</dd>
+          <dt>Телефон</dt>
+          <dd>{{ client_phone_display }}</dd>
+          {% if conversation.client.telegram_id %}
+          <dt>Telegram</dt>
+          <dd><code class="small">{{ conversation.client.telegram_id }}</code></dd>
+          {% endif %}
+          {% if conversation.client.whatsapp_phone %}
+          <dt>WhatsApp</dt>
+          <dd>{{ conversation.client.whatsapp_phone }}</dd>
+          {% endif %}
+          <dt>Заказов через бота</dt>
+          <dd>{{ conversation.client.total_orders }}</dd>
+        </dl>
+      </div>
+    </div>
+
+    <div class="panel mb-3">
+      <div class="panel-header"><i class="bi bi-activity me-2"></i>Состояние диалога</div>
+      <div class="panel-body">
+        <dl class="assistant-dialog-meta-list mb-0">
+          <dt>Намерение</dt>
+          <dd>{{ intent_label }}</dd>
+          <dt>Обновлён</dt>
+          <dd>{{ conversation.updated_at|date:"d.m.Y H:i" }}</dd>
+          <dt>Создан</dt>
+          <dd>{{ conversation.created_at|date:"d.m.Y H:i" }}</dd>
+        </dl>
+      </div>
+    </div>
+
+    {% if linked_booking %}
+    <div class="panel mb-3">
+      <div class="panel-header"><i class="bi bi-calendar-check me-2"></i>Бронь в ERP</div>
+      <div class="panel-body">
+        <dl class="assistant-dialog-meta-list mb-0">
+          <dt>Кабинка</dt>
+          <dd class="fw-semibold">№{{ linked_booking.erp_reservation.table.number }}</dd>
+          <dt>Интервал</dt>
+          <dd>
+            {{ linked_booking.erp_reservation.reserved_for|date:"d.m.Y H:i" }}
+            — {{ linked_booking.erp_reservation.reserved_until|date:"H:i" }}
+          </dd>
+          <dt>Гость</dt>
+          <dd>{{ linked_booking.erp_reservation.guest_name }}</dd>
+        </dl>
+        <a href="{% url 'tables:reservation_detail' linked_booking.erp_reservation.pk %}" class="btn btn-sm btn-sakura-outline mt-3">
+          Открыть бронь
+        </a>
+      </div>
+    </div>
+    {% endif %}
+
+    {% if draft_lines %}
+    <div class="panel">
+      <div class="panel-header"><i class="bi bi-pencil-square me-2"></i>Черновик заказа / брони</div>
+      <div class="panel-body">
+        <dl class="assistant-dialog-meta-list mb-0">
+          {% for line in draft_lines %}
+          <dt>{{ line.label }}</dt>
+          <dd>{{ line.value }}</dd>
+          {% endfor %}
+        </dl>
+        {% if conversation.status == 'waiting_confirm' %}
+        <div class="alert alert-warning py-2 px-3 small mb-0 mt-3">
+          <i class="bi bi-hourglass-split me-1"></i> Ожидает подтверждения от клиента
+        </div>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

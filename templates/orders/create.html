@@ -15,11 +15,10 @@
     <div class="panel">
       <div class="panel-header"><i class="bi bi-menu-button-wide me-2"></i>Меню</div>
       <div class="panel-body menu-grid">
-        {% regroup menu_items by category as categories %}
-        {% for cat in categories %}
-        <div class="menu-category-title">{{ cat.grouper.name }}</div>
-        <div class="row g-2">
-          {% for item in cat.list %}
+        {% for cat in menu_categories %}
+        <div class="menu-category-title">{{ cat.name }}</div>
+        <div class="row g-2 mb-2">
+          {% for item in cat.items.all %}
           <div class="col-md-6 col-xl-4">
             <form method="post" class="d-grid h-100">
               {% csrf_token %}
@@ -34,7 +33,7 @@
           {% endfor %}
         </div>
         {% empty %}
-        <div class="empty-state"><p>Запустите <code>python manage.py seed_menu</code></p></div>
+        <div class="empty-state"><p>Нет доступных блюд</p></div>
         {% endfor %}
       </div>
     </div>

@@ -25,7 +25,7 @@ class OrderForm(forms.ModelForm):
 
 class AddOrderItemForm(forms.Form):
     menu_item = forms.ModelChoiceField(
-        queryset=MenuItem.objects.filter(is_available=True),
+        queryset=MenuItem.objects.filter(is_available=True, is_stopped=False),
         label="Блюдо",
         widget=forms.Select(attrs={"class": "form-select"}),
     )

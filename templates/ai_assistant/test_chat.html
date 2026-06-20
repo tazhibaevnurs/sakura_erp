@@ -1,0 +1,210 @@
+{% extends "base.html" %}
+{% block title %}Тестовый чат — ИИ-ассистент{% endblock %}
+{% block content %}
+<div class="action-bar">
+  <div>
+    <a href="{% url 'ai_assistant:dashboard' %}" class="small text-muted text-decoration-none d-inline-block mb-1">← ИИ-ассистент</a>
+    <h1 class="h3 fw-bold mb-0">Тестовый диалог</h1>
+    <p class="text-muted small mb-0">Проверка промпта и сценариев без Telegram</p>
+  </div>
+  <div class="d-flex flex-wrap gap-2">
+    {% if conversation.pk %}
+    <a href="{% url 'ai_assistant:dialog_detail' conversation.pk %}" class="btn btn-sakura-outline btn-sm">В ERP-диалогах</a>
+    {% endif %}
+    <a href="{% url 'ai_assistant:settings' %}" class="btn btn-sakura-outline btn-sm">Настройки</a>
+  </div>
+</div>
+
+{% if not status.ai_configured %}
+<div class="alert alert-warning">Задайте <code>GEMINI_API_KEY</code> в .env для работы чата.</div>
+{% endif %}
+
+<div class="row g-4">
+  <div class="col-lg-8">
+    <div class="panel">
+      <div class="panel-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-chat-dots me-2"></i>Чат</span>
+        <button type="button" class="btn btn-sm btn-outline-secondary" id="resetChatBtn">Новый диалог</button>
+      </div>
+      <div class="panel-body assistant-test-wrap">
+        <div id="chatBox" class="assistant-test-log">
+          {% for msg in messages_list %}
+          <div class="assistant-test-turn assistant-test-turn--{% if msg.role == 'user' %}user{% else %}bot{% endif %}">
+            <div class="assistant-msg assistant-msg--{% if msg.role == 'user' %}user{% else %}bot{% endif %}">{{ msg.content }}</div>
+            <div class="assistant-msg__meta">{{ msg.created_at }}{% if msg.intent %} · {{ msg.intent }}{% endif %}</div>
+          </div>
+          {% empty %}
+          <p class="text-muted small mb-0" id="chatEmpty">Напишите сообщение или попробуйте: «Что у вас в меню?»</p>
+          {% endfor %}
+        </div>
+
+        <div id="confirmBar" class="assistant-test-confirm{% if conversation.status != 'waiting_confirm' or not conversation.draft_data %} is-hidden{% endif %}">
+          <span class="small text-muted me-auto" id="confirmBarLabel">{% if conversation.language == 'ky' %}Заказды же бронду тастыктоо:{% else %}Подтвердите заказ или бронь:{% endif %}</span>
+          <button type="button" class="btn btn-sm btn-success" data-quick="confirm" id="confirmBtn">{% if conversation.language == 'ky' %}✅ Тастыктоо{% else %}✅ Подтвердить{% endif %}</button>
+          <button type="button" class="btn btn-sm btn-outline-danger" data-quick="cancel" id="cancelBtn">{% if conversation.language == 'ky' %}❌ Токтотуу{% else %}❌ Отменить{% endif %}</button>
+        </div>
+
+        <form id="chatForm" class="assistant-test-composer">
+          {% csrf_token %}
+          <textarea id="chatInput" class="form-control" rows="2" placeholder="Сообщение…" {% if not status.ai_configured %}disabled{% endif %}></textarea>
+          <button type="submit" class="btn btn-sakura flex-shrink-0" title="Отправить" {% if not status.ai_configured %}disabled{% endif %}>
+            <i class="bi bi-send-fill"></i>
+          </button>
+        </form>
+        <div class="form-text mb-0">Enter — отправить, Shift+Enter — новая строка. Команды: /start /order /booking /history /help</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-4">
+    <div class="panel mb-3">
+      <div class="panel-header">Состояние</div>
+      <div class="panel-body small">
+        <dl class="mb-0">
+          <dt class="text-muted">Статус</dt>
+          <dd id="metaStatus" class="mb-1">{{ conversation.get_status_display }}</dd>
+          <dt class="text-muted">Намерение</dt>
+          <dd id="metaIntent" class="mb-1">{{ conversation.current_intent|default:"—" }}</dd>
+          <dt class="text-muted">Черновик</dt>
+          <dd class="mb-0">
+            <pre id="metaDraft" class="small bg-light p-2 rounded mb-0" style="max-height:140px;overflow:auto">{{ conversation.draft_data|default:"{}" }}</pre>
+          </dd>
+        </dl>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-header">Быстрые фразы</div>
+      <div class="panel-body d-flex flex-wrap gap-2">
+        <button type="button" class="btn btn-sm btn-outline-secondary" data-quick="Что у вас в меню?">Меню</button>
+        <button type="button" class="btn btn-sm btn-outline-secondary" data-quick="Хочу заказ на доставку">Заказ</button>
+        <button type="button" class="btn btn-sm btn-outline-secondary" data-quick="Забронировать стол на завтра в 19:00, 4 гостя">Бронь</button>
+        <button type="button" class="btn btn-sm btn-outline-secondary" data-quick="Какой у вас адрес и часы работы?">Контакты</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const chatBox = document.getElementById('chatBox');
+  const chatForm = document.getElementById('chatForm');
+  const chatInput = document.getElementById('chatInput');
+  const confirmBar = document.getElementById('confirmBar');
+  const confirmBarLabel = document.getElementById('confirmBarLabel');
+  const confirmBtn = document.getElementById('confirmBtn');
+  const cancelBtn = document.getElementById('cancelBtn');
+  const confirmUi = {
+    ru: {
+      label: 'Подтвердите заказ или бронь:',
+      confirm: '✅ Подтвердить',
+      cancel: '❌ Отменить',
+    },
+    ky: {
+      label: 'Заказды же бронду тастыктоо:',
+      confirm: '✅ Тастыктоо',
+      cancel: '❌ Токтотуу',
+    },
+  };
+
+  function updateConfirmBar(lang) {
+    const ui = confirmUi[lang === 'ky' ? 'ky' : 'ru'];
+    confirmBarLabel.textContent = ui.label;
+    confirmBtn.textContent = ui.confirm;
+    cancelBtn.textContent = ui.cancel;
+  }
+  const metaStatus = document.getElementById('metaStatus');
+  const metaIntent = document.getElementById('metaIntent');
+  const metaDraft = document.getElementById('metaDraft');
+  const apiUrl = '{% url "ai_assistant:test_chat_api" %}';
+  const csrf = document.querySelector('[name=csrfmiddlewaretoken]').value;
+
+  function renderMessages(messages) {
+    chatBox.innerHTML = '';
+    if (!messages.length) {
+      chatBox.innerHTML = '<p class="text-muted small mb-0">Напишите сообщение или попробуйте: «Что у вас в меню?»</p>';
+      return;
+    }
+    messages.forEach(function (msg) {
+      const isUser = msg.role === 'user';
+      const wrap = document.createElement('div');
+      wrap.className = 'assistant-test-turn assistant-test-turn--' + (isUser ? 'user' : 'bot');
+      const intent = msg.intent ? ' · ' + msg.intent : '';
+      wrap.innerHTML =
+        '<div class="assistant-msg assistant-msg--' + (isUser ? 'user' : 'bot') + '"></div>' +
+        '<div class="assistant-msg__meta">' + msg.created_at + intent + '</div>';
+      wrap.querySelector('.assistant-msg').textContent = msg.content;
+      chatBox.appendChild(wrap);
+    });
+    chatBox.scrollTop = chatBox.scrollHeight;
+  }
+
+  function updateMeta(data) {
+    if (data.status_display) metaStatus.textContent = data.status_display;
+    if (data.intent !== undefined) metaIntent.textContent = data.intent || '—';
+    if (data.draft_data !== undefined) {
+      metaDraft.textContent = JSON.stringify(data.draft_data, null, 2);
+    }
+    if (data.language) updateConfirmBar(data.language);
+    confirmBar.classList.toggle('is-hidden', !data.use_buttons);
+  }
+
+  async function sendMessage(text) {
+    text = (text || '').trim();
+    if (!text) return;
+    chatInput.disabled = true;
+    chatForm.querySelector('button[type=submit]').disabled = true;
+    const fd = new FormData();
+    fd.append('message', text);
+    fd.append('action', 'send');
+    try {
+      const r = await fetch(apiUrl, { method: 'POST', body: fd, headers: { 'X-CSRFToken': csrf } });
+      const data = await r.json();
+      if (!data.ok) {
+        alert(data.error || 'Ошибка');
+        return;
+      }
+      renderMessages(data.messages || []);
+      updateMeta(data);
+    } catch (e) {
+      alert('Ошибка сети');
+    } finally {
+      chatInput.disabled = false;
+      chatForm.querySelector('button[type=submit]').disabled = false;
+      chatInput.value = '';
+      chatInput.focus();
+    }
+  }
+
+  chatForm.addEventListener('submit', function (e) {
+    e.preventDefault();
+    sendMessage(chatInput.value);
+  });
+
+  chatInput.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage(chatInput.value);
+    }
+  });
+
+  document.querySelectorAll('[data-quick]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      sendMessage(btn.getAttribute('data-quick'));
+    });
+  });
+
+  document.getElementById('resetChatBtn').addEventListener('click', async function () {
+    if (!confirm('Начать новый тестовый диалог?')) return;
+    const fd = new FormData();
+    fd.append('action', 'reset');
+    await fetch(apiUrl, { method: 'POST', body: fd, headers: { 'X-CSRFToken': csrf } });
+    renderMessages([]);
+    updateMeta({ status_display: 'Активен', intent: '', draft_data: {}, use_buttons: false });
+  });
+
+  chatBox.scrollTop = chatBox.scrollHeight;
+})();
+</script>
+{% endblock %}

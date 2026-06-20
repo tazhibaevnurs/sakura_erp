@@ -48,7 +48,7 @@
 </div>
 {% endblock %}
 {% block scripts %}
-<script src="{% static 'js/sakura-clock.js' %}"></script>
+<script src="{% static 'js/sakura-clock.js' %}?v=5"></script>
 <script>
 document.addEventListener('DOMContentLoaded', () => {
   const booked = {{ booked_slots_json|safe }};

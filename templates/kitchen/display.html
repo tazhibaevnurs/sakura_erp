@@ -110,9 +110,11 @@
 
 <div class="panel">
 
-  <div class="panel-header">
+  <div class="panel-header d-flex flex-wrap justify-content-between align-items-center gap-2">
 
-    <span><i class="bi bi-journal-text me-2"></i>Все заказы цеха «{{ section.name }}»</span>
+    <span><i class="bi bi-journal-text me-2"></i>Заказы цеха «{{ section.name }}»</span>
+
+    <div id="kitchen-history-tabs"></div>
 
   </div>
 
@@ -142,7 +144,7 @@
 
       </thead>
 
-      <tbody>
+      <tbody id="kitchen-orders-body">
 
       {% for o in section_orders %}
 
@@ -186,7 +188,7 @@
 
         <tr>
 
-          <td colspan="7" class="text-center text-muted py-4">Нет активных заказов для этого цеха</td>
+          <td colspan="7" class="text-center text-muted py-4">Нет заказов за выбранный день</td>
 
         </tr>
 
@@ -208,6 +210,7 @@
 
 {% block scripts %}
 
+<script src="{% static 'js/date-tabs.js' %}"></script>
 <script>
 
 const wsScheme = window.location.protocol === 'https:' ? 'wss' : 'ws';
@@ -391,6 +394,34 @@ function addKitchenCard(data) {
   document.getElementById('kitchen-items').prepend(col);
 
 }
+
+document.addEventListener('DOMContentLoaded', () => {
+  const tbody = document.getElementById('kitchen-orders-body');
+  const loadHistory = async (dateKey) => {
+    tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">Загрузка…</td></tr>';
+    const resp = await fetch(`{% url 'kitchen:api_orders' section.slug %}?date=${encodeURIComponent(dateKey)}`);
+    const data = await resp.json();
+    if (!data.orders.length) {
+      tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">Нет заказов</td></tr>';
+      return;
+    }
+    tbody.innerHTML = data.orders.map(o => `
+      <tr data-order-id="${o.id}">
+        <td class="fw-semibold">#${o.id}</td>
+        <td>${o.order_type}</td>
+        <td>${o.source}</td>
+        <td>${o.items.map(i => `<span class="badge item-status-badge me-1 mb-1 ${i.status === 'ready' ? 'bg-success' : i.status === 'cooking' ? 'bg-warning text-dark' : 'bg-secondary'}" data-item-id="${i.id}">${i.name} ×${i.quantity} — ${i.status_label}</span>`).join('')}</td>
+        <td><span class="badge bg-secondary">${o.status}</span></td>
+        <td class="text-nowrap">${o.created_at}</td>
+        <td class="text-end"><a href="${o.detail_url}" class="btn btn-sm btn-sakura-outline">Открыть</a></td>
+      </tr>`).join('');
+  };
+  SakuraDateTabs.mount(document.getElementById('kitchen-history-tabs'), {
+    onLoad: loadHistory,
+    defaultDate: 'today',
+    showTomorrow: true,
+  });
+});
 
 </script>
 

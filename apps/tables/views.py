@@ -1,21 +1,26 @@
 import json
 from calendar import monthrange
 from datetime import date, datetime, timedelta
+from decimal import Decimal, InvalidOperation
 from urllib.parse import urlencode
 
 from django.contrib import messages
 from django.core.serializers.json import DjangoJSONEncoder
-from django.db.models import Prefetch
+from django.db import IntegrityError, transaction
+from django.db.models import Prefetch, Q
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
 from django.utils import timezone
 from django.views import View
-from django.views.generic import DetailView, FormView, TemplateView
+from django.views.generic import DetailView, TemplateView
 
+from apps.accounts.models import Employee
 from apps.core.employees import get_acting_employee
 from apps.core.mixins import RoleRequiredMixin
-from apps.core.roles import FLOOR_STAFF_ROLES
+from apps.core.roles import FLOOR_STAFF_ROLES, WAITER_ROLES
+from apps.menu.models import MenuItem
+from apps.orders.models import OrderItem
 
 from .calendar_order import (
     available_tables_for_slot,
@@ -24,9 +29,10 @@ from .calendar_order import (
     combine_slot,
     reservations_for_date,
 )
-from .forms import CalendarOrderForm, QuickReserveTableForm, TableReservationForm
-from .models import Table, TableReservation
+from .forms import CalendarOrderForm, QuickReserveTableForm
+from .models import Table, TableReservation, TableWaiterAssignment
 from .reservation_time import (
+    DEFAULT_DURATION,
     effective_floor_status,
     floor_card_style,
     floor_reservation_for_table,
@@ -51,6 +57,97 @@ def _calendar_order_url(**params):
     return f"{base}?{qs}" if qs else base
 
 
+def _calendar_order_url_for_table(table):
+    """Приём заказа: сегодня, ближайший слот, выбранная кабинка."""
+    today = timezone.localdate()
+    now_local = timezone.localtime()
+    if today == now_local.date():
+        rounded = now_local.replace(
+            minute=(now_local.minute // 15) * 15, second=0, microsecond=0
+        )
+        time_start = rounded.time()
+    else:
+        time_start = datetime.strptime("12:00", "%H:%M").time()
+    end_dt = datetime.combine(today, time_start) + DEFAULT_DURATION
+    return _calendar_order_url(
+        step="order",
+        date=today.isoformat(),
+        start=time_start.strftime("%H:%M"),
+        end=end_dt.strftime("%H:%M"),
+        table=table.pk,
+    )
+
+
+def _wants_json(request):
+    return (
+        request.headers.get("X-Requested-With") == "XMLHttpRequest"
+        or "application/json" in request.headers.get("Accept", "")
+    )
+
+
+def _seats_label(capacity):
+    if capacity == 1:
+        return "1 место"
+    if 2 <= capacity <= 4:
+        return f"{capacity} места"
+    return f"{capacity} мест"
+
+
+def _employees_for_waiter_picker(table):
+    """Официанты + уже назначенные на эту кабинку (чтобы не пропадали из списка)."""
+    assigned_ids = table.waiter_assignments.filter(is_active=True).values_list(
+        "waiter_id", flat=True
+    )
+    return (
+        Employee.objects.filter(is_active=True)
+        .filter(Q(role__slug__in=WAITER_ROLES) | Q(pk__in=assigned_ids))
+        .select_related("user", "role")
+        .order_by("user__last_name", "user__first_name", "pk")
+        .distinct()
+    )
+
+
+def _table_status_payload(table):
+    sync_table_reserved_status(table)
+    order = table.active_order
+    reservation = floor_reservation_for_table(table)
+    card_style = floor_card_style(table)
+    status_labels = dict(Table.Status.choices)
+    if card_style == "booking_now":
+        status_label = "Сейчас бронь"
+    elif card_style == "booked":
+        status_label = "Зарезервирован"
+    else:
+        status_label = status_labels.get(card_style, card_style)
+
+    guest_name = ""
+    time_range = ""
+    show_reservation = card_style in ("booked", "booking_now") and reservation
+    if show_reservation:
+        guest_name = reservation.guest_name
+        start = timezone.localtime(reservation.reserved_for)
+        end = timezone.localtime(reservation.reserved_until)
+        time_range = f"{start.strftime('%d.%m %H:%M')}–{end.strftime('%H:%M')}"
+
+    waiters = table.assigned_waiters
+    waiter_list = [{"id": w.pk, "name": str(w)} for w in waiters]
+
+    return {
+        "id": table.pk,
+        "number": table.number,
+        "status": card_style,
+        "status_label": status_label,
+        "order_id": order.pk if order else None,
+        "reservation_id": reservation.pk if reservation else None,
+        "guest_name": guest_name,
+        "time_range": time_range,
+        "show_reservation": show_reservation,
+        "seats_label": _seats_label(table.capacity),
+        "waiters": waiter_list,
+        "hub_url": _booth_url(table),
+    }
+
+
 class FloorPlanView(RoleRequiredMixin, TemplateView):
     template_name = "tables/floor_plan.html"
     allowed_roles = FLOOR_STAFF_ROLES + ["admin", "owner"]
@@ -62,7 +159,13 @@ class FloorPlanView(RoleRequiredMixin, TemplateView):
         )
         tables = list(
             Table.objects.prefetch_related(
-                Prefetch("reservations", queryset=active_res)
+                Prefetch("reservations", queryset=active_res),
+                Prefetch(
+                    "waiter_assignments",
+                    queryset=TableWaiterAssignment.objects.filter(
+                        is_active=True
+                    ).select_related("waiter__user"),
+                ),
             ).order_by("number")
         )
         for table in tables:
@@ -81,11 +184,21 @@ class FloorPlanView(RoleRequiredMixin, TemplateView):
 
 
 class TableHubView(RoleRequiredMixin, DetailView):
-    """Кабинка: открыть заказ, забронировать или управлять бронью."""
+    """Кабинка: открыть заказ или перейти к приёму заказа."""
     model = Table
     template_name = "tables/booth_hub.html"
     context_object_name = "table"
     allowed_roles = FLOOR_STAFF_ROLES + ["admin", "owner"]
+
+    def get_queryset(self):
+        return Table.objects.prefetch_related(
+            Prefetch(
+                "waiter_assignments",
+                queryset=TableWaiterAssignment.objects.filter(
+                    is_active=True
+                ).select_related("waiter__user"),
+            )
+        )
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
@@ -95,65 +208,109 @@ class TableHubView(RoleRequiredMixin, DetailView):
         ctx["reservation"] = table.active_reservation
         ctx["upcoming"] = table.upcoming_reservations()
         ctx["can_reserve"] = True
+        waiters = _employees_for_waiter_picker(table)
+        ctx["waiters"] = waiters
+        ctx["assigned_waiters"] = table.assigned_waiters
+        assigned_ids = [w.pk for w in table.assigned_waiters]
+        ctx["assigned_waiter_ids"] = assigned_ids
+        ctx["assigned_waiter_ids_json"] = json.dumps(assigned_ids, cls=DjangoJSONEncoder)
+        ctx["calendar_order_url"] = _calendar_order_url_for_table(table)
         return ctx
 
 
-class ReserveTableView(RoleRequiredMixin, FormView):
-    template_name = "tables/reserve.html"
-    form_class = TableReservationForm
+class AssignWaiterView(RoleRequiredMixin, View):
+    allowed_roles = ["admin", "owner"]
+
+    def post(self, request, pk):
+        table = get_object_or_404(Table, pk=pk)
+        waiter_ids_raw = request.POST.getlist("waiter_ids")
+        if not waiter_ids_raw and request.POST.get("waiter_id"):
+            waiter_ids_raw = [request.POST["waiter_id"]]
+        selected_ids = {
+            int(wid)
+            for wid in waiter_ids_raw
+            if wid and str(wid).isdigit()
+        }
+        employee = get_acting_employee(request.user)
+        if not employee:
+            msg = "Не удалось определить сотрудника."
+            if _wants_json(request):
+                return JsonResponse({"ok": False, "error": msg}, status=400)
+            messages.error(request, msg)
+            return redirect("tables:booth", pk=pk)
+
+        if selected_ids:
+            valid_ids = set(
+                Employee.objects.filter(is_active=True, pk__in=selected_ids)
+                .filter(
+                    Q(role__slug__in=WAITER_ROLES)
+                    | Q(table_assignments__table=table, table_assignments__is_active=True)
+                )
+                .values_list("pk", flat=True)
+                .distinct()
+            )
+            invalid = selected_ids - valid_ids
+            if invalid:
+                msg = "Один или несколько официантов недоступны."
+                if _wants_json(request):
+                    return JsonResponse({"ok": False, "error": msg}, status=400)
+                messages.error(request, msg)
+                return redirect("tables:booth", pk=pk)
+        else:
+            valid_ids = set()
+
+        TableWaiterAssignment.objects.filter(table=table, is_active=True).exclude(
+            waiter_id__in=valid_ids
+        ).update(is_active=False)
+
+        for wid in valid_ids:
+            assignment, created = TableWaiterAssignment.objects.get_or_create(
+                table=table,
+                waiter_id=wid,
+                defaults={"assigned_by": employee, "is_active": True},
+            )
+            if not created and not assignment.is_active:
+                assignment.is_active = True
+                assignment.assigned_by = employee
+                assignment.save(update_fields=["is_active", "assigned_by"])
+
+        assigned = table.assigned_waiters
+        if assigned:
+            names = ", ".join(str(w) for w in assigned)
+            msg = f"Кабинка {table.number}: {names}"
+            level = "success"
+        else:
+            msg = f"С кабинки {table.number} сняты все официанты."
+            level = "info"
+
+        if _wants_json(request):
+            return JsonResponse(
+                {
+                    "ok": True,
+                    "message": msg,
+                    "level": level,
+                    "waiters": [{"id": w.pk, "name": str(w)} for w in assigned],
+                }
+            )
+
+        if assigned:
+            messages.success(request, msg)
+        else:
+            messages.info(request, msg)
+        return redirect("tables:booth", pk=pk)
+
+
+class ReserveTableView(RoleRequiredMixin, View):
+    """Старая страница /reserve/ — редирект на календарный приём заказа."""
+
     allowed_roles = FLOOR_STAFF_ROLES + ["admin", "owner"]
 
-    def dispatch(self, request, *args, **kwargs):
-        self.table = get_object_or_404(Table, pk=kwargs["pk"])
-        return super().dispatch(request, *args, **kwargs)
+    def get(self, request, pk, *args, **kwargs):
+        table = get_object_or_404(Table, pk=pk)
+        return redirect(_calendar_order_url_for_table(table))
 
-    def get_form_kwargs(self):
-        kwargs = super().get_form_kwargs()
-        kwargs["table"] = self.table
-        return kwargs
-
-    def get_context_data(self, **kwargs):
-        ctx = super().get_context_data(**kwargs)
-        ctx["table"] = self.table
-        existing = self.table.reservations.filter(
-            status=TableReservation.Status.ACTIVE
-        ).order_by("reserved_for")
-        ctx["existing_reservations"] = existing
-        ctx["booked_slots_json"] = json.dumps(
-            [
-                {
-                    "start": r.reserved_for.isoformat(),
-                    "end": r.reserved_until.isoformat(),
-                    "guest": r.guest_name,
-                }
-                for r in existing
-            ],
-            cls=DjangoJSONEncoder,
-        )
-        return ctx
-
-    def form_valid(self, form):
-        try:
-            reservation = create_reservation(
-                table=self.table,
-                guest_name=form.cleaned_data["guest_name"],
-                guest_phone=form.cleaned_data.get("guest_phone", ""),
-                guest_count=form.cleaned_data["guest_count"],
-                reserved_for=form.cleaned_data["reserved_for"],
-                reserved_until=form.cleaned_data["reserved_until"],
-                comment=form.cleaned_data.get("comment", ""),
-                employee=get_acting_employee(self.request.user),
-            )
-        except ReservationError as e:
-            form.add_error(None, str(e))
-            return self.form_invalid(form)
-
-        messages.success(
-            self.request,
-            f"Кабинка {self.table.number} забронирована на "
-            f"{reservation.time_range_display}.",
-        )
-        return redirect("tables:reservation_detail", pk=reservation.pk)
+    def post(self, request, pk, *args, **kwargs):
+        return self.get(request, pk, *args, **kwargs)
 
 
 class ReservationDetailView(RoleRequiredMixin, DetailView):
@@ -177,7 +334,7 @@ class ReservationListView(RoleRequiredMixin, TemplateView):
         qs = TableReservation.objects.select_related(
             "table", "created_by__user"
         ).filter(status=TableReservation.Status.ACTIVE)
-        ctx["reservations"] = qs.order_by("reserved_for")
+        ctx["reservations"] = qs.order_by("-reserved_for", "-pk")
         ctx["quick_form"] = QuickReserveTableForm()
         return ctx
 
@@ -313,19 +470,37 @@ class CalendarOrderView(RoleRequiredMixin, View):
             messages.error(request, "Не удалось определить сотрудника.")
             return redirect(_calendar_order_url())
         try:
-            reservation = create_reservation(
-                table=form.table,
-                guest_name=form.cleaned_data["guest_name"],
-                guest_phone=form.cleaned_data.get("guest_phone", ""),
-                guest_count=form.cleaned_data["guest_count"],
-                reserved_for=form.cleaned_data["reserved_for"],
-                reserved_until=form.cleaned_data["reserved_until"],
-                comment=form.cleaned_data.get("comment", ""),
-                employee=employee,
-            )
-            order = create_preorder_for_reservation(reservation, employee)
+            with transaction.atomic():
+                reservation = create_reservation(
+                    table=form.table,
+                    guest_name=form.cleaned_data["guest_name"],
+                    guest_phone=form.cleaned_data.get("guest_phone", ""),
+                    guest_count=form.cleaned_data["guest_count"],
+                    reserved_for=form.cleaned_data["reserved_for"],
+                    reserved_until=form.cleaned_data["reserved_until"],
+                    comment=form.cleaned_data.get("comment", ""),
+                    employee=employee,
+                )
+                order = create_preorder_for_reservation(reservation, employee)
+                self._apply_order_extras(request, order)
         except ReservationError as e:
             messages.error(request, str(e))
+            cd = form.cleaned_data
+            end_val = cd.get("reserved_time_end")
+            return redirect(
+                _calendar_order_url(
+                    step="order",
+                    date=cd["reserved_date"].isoformat(),
+                    start=cd["reserved_time_start"].strftime("%H:%M"),
+                    end=end_val.strftime("%H:%M") if end_val else "",
+                    table=cd["table_id"],
+                )
+            )
+        except IntegrityError:
+            messages.error(
+                request,
+                "Не удалось привязать заказ к брони. Попробуйте ещё раз или закройте старый заказ по этому столу.",
+            )
             cd = form.cleaned_data
             end_val = cd.get("reserved_time_end")
             return redirect(
@@ -340,10 +515,39 @@ class CalendarOrderView(RoleRequiredMixin, View):
 
         messages.success(
             request,
-            f"Заказ по календарю: кабинка {form.table.number}, "
-            f"{reservation.time_range_display}. Добавьте блюда.",
+            f"Заказ принят: кабинка {form.table.number}, "
+            f"{reservation.time_range_display}. Заказ #{order.pk}.",
         )
-        return redirect("orders:detail", pk=order.pk)
+        return redirect(_calendar_order_url())
+
+    def _apply_order_extras(self, request, order):
+        cart_raw = request.POST.get("cart_json", "[]")
+        try:
+            cart = json.loads(cart_raw)
+        except json.JSONDecodeError:
+            cart = []
+        for row in cart:
+            menu_item = MenuItem.objects.filter(
+                pk=row.get("menu_item_id"),
+                is_available=True,
+                is_stopped=False,
+            ).first()
+            if not menu_item:
+                continue
+            qty = row.get("quantity", 1)
+            try:
+                quantity = Decimal(str(qty))
+            except (InvalidOperation, TypeError, ValueError):
+                quantity = Decimal("1")
+            OrderItem.objects.create(
+                order=order,
+                menu_item=menu_item,
+                kitchen_section=menu_item.category.kitchen_section,
+                quantity=quantity,
+                price=menu_item.price,
+                note=(row.get("note") or "")[:200],
+            )
+        order.recalculate_total()
 
     def _base_context(self, request, step, query=None):
         q = query if query is not None else request.GET
@@ -462,34 +666,6 @@ class TableStatusAPIView(RoleRequiredMixin, View):
     allowed_roles = FLOOR_STAFF_ROLES + ["admin", "owner"]
 
     def get(self, request):
-        data = []
-        for t in Table.objects.all():
-            sync_table_reserved_status(t)
-            order = t.active_order
-            reservation = floor_reservation_for_table(t)
-            card_style = floor_card_style(t)
-            status_labels = dict(Table.Status.choices)
-            if card_style == "booking_now":
-                status_label = "Сейчас бронь"
-            elif card_style == "booked":
-                status_label = "Зарезервирован"
-            else:
-                status_label = status_labels.get(card_style, card_style)
-            data.append(
-                {
-                    "id": t.pk,
-                    "number": t.number,
-                    "status": card_style,
-                    "status_label": status_label,
-                    "order_id": order.pk if order else None,
-                    "reservation_id": reservation.pk if reservation else None,
-                    "guest_name": reservation.guest_name if reservation else "",
-                    "reserved_for": (
-                        timezone.localtime(reservation.reserved_for).strftime("%H:%M")
-                        if reservation
-                        else ""
-                    ),
-                    "hub_url": _booth_url(t),
-                }
-            )
+        tables = Table.objects.all().order_by("number")
+        data = [_table_status_payload(t) for t in tables]
         return JsonResponse({"tables": data})

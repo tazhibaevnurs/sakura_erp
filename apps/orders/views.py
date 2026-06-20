@@ -20,10 +20,12 @@ from apps.core.employees import get_acting_employee, user_effective_role, user_h
 from apps.core.mixins import RoleRequiredMixin
 from apps.core.roles import FLOOR_STAFF_ROLES, KITCHEN_ROLES
 from apps.menu.models import MenuItem
+from apps.menu.services import get_menu_categories
 from apps.tables.models import Table
 from apps.tables.reservation_time import current_reservation_for_table
 
 from .forms import AddOrderItemForm, CancelOrderForm, DeliveryOrderForm, OrderForm, PayOrderForm
+from .date_filters import day_datetime_bounds
 from .models import Order, OrderItem
 
 logger = logging.getLogger("chaihana.finance")
@@ -36,7 +38,7 @@ def _orders_for_user(user):
     if not hasattr(user, "employee"):
         return qs.none()
     role = user_effective_role(user)
-    if role in ("owner", "admin") or role in KITCHEN_ROLES:
+    if role in ("owner", "admin") or role in KITCHEN_ROLES or role in FLOOR_STAFF_ROLES:
         return qs
     return qs.filter(waiter=user.employee)
 
@@ -92,19 +94,29 @@ class OrderListView(RoleRequiredMixin, ListView):
                 ),
             )
         )
-        view_filter = self.request.GET.get("filter", "active")
-        if view_filter == "closed":
+        view_filter = self.request.GET.get("filter", "today")
+        if view_filter == "today":
+            start, end = day_datetime_bounds(timezone.localdate())
+            qs = qs.filter(created_at__gte=start, created_at__lt=end)
+        elif view_filter == "closed":
             qs = qs.filter(status__in=[Order.Status.PAID, Order.Status.CANCELLED])
         elif view_filter == "all":
             pass
-        else:
+        elif view_filter == "active":
             qs = qs.filter(status__in=ACTIVE_ORDER_STATUSES)
+        else:
+            start, end = day_datetime_bounds(timezone.localdate())
+            qs = qs.filter(created_at__gte=start, created_at__lt=end)
         return qs.order_by("-created_at")
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
-        ctx["order_filter"] = self.request.GET.get("filter", "active")
+        ctx["order_filter"] = self.request.GET.get("filter", "today")
         base_qs = _orders_for_user(self.request.user)
+        today_start, today_end = day_datetime_bounds(timezone.localdate())
+        ctx["count_today"] = base_qs.filter(
+            created_at__gte=today_start, created_at__lt=today_end
+        ).count()
         ctx["count_active"] = base_qs.filter(status__in=ACTIVE_ORDER_STATUSES).count()
         ctx["count_closed"] = base_qs.filter(
             status__in=[Order.Status.PAID, Order.Status.CANCELLED]
@@ -125,6 +137,8 @@ class CreateOrderView(RoleRequiredMixin, FormView):
             return redirect("orders:detail", pk=active.pk)
         current_res = current_reservation_for_table(self.table)
         if request.method == "GET" and current_res:
+            if current_res.order_id:
+                return redirect("orders:detail", pk=current_res.order.pk)
             messages.info(
                 request,
                 "Сейчас действует бронь на это время. Отметьте прибытие гостя или отмените бронь.",
@@ -135,9 +149,10 @@ class CreateOrderView(RoleRequiredMixin, FormView):
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         ctx["table"] = self.table
-        ctx["menu_items"] = MenuItem.objects.filter(is_available=True).select_related(
-            "category"
-        ).order_by("category__order", "order")
+        ctx["menu_categories"] = get_menu_categories()
+        ctx["menu_items"] = MenuItem.objects.filter(
+            is_available=True, is_stopped=False
+        ).select_related("category").order_by("category__order", "order")
         ctx["order"] = _active_order_for_table(self.table)
         ctx["add_form"] = AddOrderItemForm()
         return ctx
@@ -165,7 +180,9 @@ class CreateOrderView(RoleRequiredMixin, FormView):
     def _add_item(self, request):
         menu_item_id = request.POST.get("menu_item_id")
         if menu_item_id:
-            menu_item = get_object_or_404(MenuItem, pk=menu_item_id, is_available=True)
+            menu_item = get_object_or_404(
+                MenuItem, pk=menu_item_id, is_available=True, is_stopped=False
+            )
             quantity = _parse_quantity(request.POST.get("quantity", 1))
             note = request.POST.get("note", "")
         else:
@@ -215,10 +232,13 @@ class OrderDetailView(RoleRequiredMixin, DetailView):
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         ctx["add_form"] = AddOrderItemForm()
-        ctx["menu_items"] = MenuItem.objects.filter(is_available=True).select_related(
-            "category"
-        )
+        ctx["menu_categories"] = get_menu_categories()
+        ctx["menu_items"] = MenuItem.objects.filter(
+            is_available=True, is_stopped=False
+        ).select_related("category")
         ctx["cash_closed"] = is_day_closed(date.today())
+        ctx["kitchen_status"] = self.object.kitchen_display_status()
+        ctx["can_send_kitchen"] = self.object.can_send_to_kitchen()
         return ctx
 
     def post(self, request, *args, **kwargs):
@@ -240,11 +260,63 @@ class OrderDetailView(RoleRequiredMixin, DetailView):
                     self.object.status = Order.Status.SENT
                     self.object.save(update_fields=["status"])
         elif "send_kitchen" in request.POST:
+            if not self.object.can_send_to_kitchen():
+                messages.error(
+                    request,
+                    "Добавьте блюда"
+                    + (
+                        " и заполните данные клиента (задаток, время готовности)."
+                        if self.object.requires_guest_fields()
+                        else "."
+                    ),
+                )
+                return redirect("orders:detail", pk=self.object.pk)
             self.object.status = Order.Status.SENT
             self.object.save(update_fields=["status"])
             now = timezone.now()
             self.object.items.filter(sent_at__isnull=True).update(sent_at=now)
             messages.success(request, "Заказ отправлен на кухню")
+        elif "save_guest_info" in request.POST:
+            if self.object.order_type in (
+                Order.OrderType.TAKEAWAY,
+                Order.OrderType.DELIVERY,
+            ):
+                self.object.customer_name = request.POST.get("customer_name", "").strip()
+                self.object.customer_phone = request.POST.get(
+                    "customer_phone", ""
+                ).strip()
+                self.object.customer_phone_ext = request.POST.get(
+                    "customer_phone_ext", ""
+                ).strip()
+                self.object.delivery_address = request.POST.get(
+                    "delivery_address", ""
+                ).strip()
+                self.object.deposit = _parse_quantity(request.POST.get("deposit", 0))
+                ready_date = request.POST.get("ready_date")
+                ready_time = request.POST.get("ready_time")
+                if ready_date and ready_time:
+                    from datetime import datetime as dt
+
+                    try:
+                        d = date.fromisoformat(ready_date)
+                        t = dt.strptime(ready_time, "%H:%M").time()
+                        self.object.estimated_ready_at = timezone.make_aware(
+                            dt.combine(d, t),
+                            timezone.get_current_timezone(),
+                        )
+                    except ValueError:
+                        pass
+                self.object.save(
+                    update_fields=[
+                        "customer_name",
+                        "customer_phone",
+                        "customer_phone_ext",
+                        "delivery_address",
+                        "deposit",
+                        "estimated_ready_at",
+                    ]
+                )
+                messages.success(request, "Данные клиента сохранены")
         return redirect("orders:detail", pk=self.object.pk)
 
 
@@ -310,100 +382,18 @@ class TakeawayOrderView(RoleRequiredMixin, TemplateView):
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
-        ctx["menu_items"] = MenuItem.objects.filter(is_available=True).select_related(
-            "category"
-        )
-        ctx["orders"] = _orders_for_user(self.request.user).filter(
-            order_type=Order.OrderType.TAKEAWAY,
-            status__in=[
-                Order.Status.OPEN,
-                Order.Status.SENT,
-                Order.Status.READY,
-                Order.Status.SERVED,
-            ],
-        )[:20]
+        ctx["today"] = timezone.localdate().isoformat()
         return ctx
 
-    def post(self, request, *args, **kwargs):
-        menu_item_id = request.POST.get("menu_item_id")
-        quantity = _parse_quantity(request.POST.get("quantity", 1))
-        menu_item = get_object_or_404(MenuItem, pk=menu_item_id)
-        order_id = request.POST.get("order_id")
-        if order_id:
-            order = get_object_or_404(_orders_for_user(request.user), pk=order_id)
-        else:
-            order = Order.objects.create(
-                waiter=_get_waiter(request.user),
-                order_type=Order.OrderType.TAKEAWAY,
-            )
-        OrderItem.objects.create(
-            order=order,
-            menu_item=menu_item,
-            kitchen_section=menu_item.category.kitchen_section,
-            quantity=quantity,
-            price=menu_item.price,
-        )
-        order.recalculate_total()
-        return redirect("orders:detail", pk=order.pk)
 
-
-class DeliveryOrderView(RoleRequiredMixin, FormView):
+class DeliveryOrderView(RoleRequiredMixin, TemplateView):
     template_name = "orders/delivery.html"
-    form_class = DeliveryOrderForm
     allowed_roles = FLOOR_STAFF_ROLES + ["admin", "owner"]
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
-        ctx["menu_items"] = MenuItem.objects.filter(is_available=True).select_related(
-            "category"
-        )
-        ctx["orders"] = _orders_for_user(self.request.user).filter(
-            order_type=Order.OrderType.DELIVERY,
-            status__in=ACTIVE_ORDER_STATUSES,
-        )[:20]
+        ctx["today"] = timezone.localdate().isoformat()
         return ctx
-
-    def form_valid(self, form):
-        menu_item_id = self.request.POST.get("menu_item_id")
-        quantity = _parse_quantity(self.request.POST.get("quantity", 1))
-        menu_item = get_object_or_404(MenuItem, pk=menu_item_id)
-        order_id = self.request.POST.get("order_id")
-        if order_id:
-            order = get_object_or_404(_orders_for_user(self.request.user), pk=order_id)
-            order.customer_name = form.cleaned_data["customer_name"]
-            order.customer_phone = form.cleaned_data["customer_phone"]
-            order.customer_phone_ext = form.cleaned_data.get("customer_phone_ext", "")
-            order.delivery_address = form.cleaned_data["delivery_address"]
-            order.save(
-                update_fields=[
-                    "customer_name",
-                    "customer_phone",
-                    "customer_phone_ext",
-                    "delivery_address",
-                ]
-            )
-        else:
-            order = Order.objects.create(
-                waiter=_get_waiter(self.request.user),
-                order_type=Order.OrderType.DELIVERY,
-                customer_name=form.cleaned_data["customer_name"],
-                customer_phone=form.cleaned_data["customer_phone"],
-                customer_phone_ext=form.cleaned_data.get("customer_phone_ext", ""),
-                delivery_address=form.cleaned_data["delivery_address"],
-            )
-        OrderItem.objects.create(
-            order=order,
-            menu_item=menu_item,
-            kitchen_section=menu_item.category.kitchen_section,
-            quantity=quantity,
-            price=menu_item.price,
-        )
-        order.recalculate_total()
-        return redirect("orders:detail", pk=order.pk)
-
-    def form_invalid(self, form):
-        messages.error(self.request, "Заполните обязательные поля доставки")
-        return self.render_to_response(self.get_context_data(form=form))
 
 
 def _kitchen_item_guard(request, item):
@@ -430,6 +420,9 @@ class OrderItemCookingAPIView(RoleRequiredMixin, View):
             return JsonResponse({"error": "invalid_status"}, status=400)
         item.status = OrderItem.Status.COOKING
         item.save(update_fields=["status"])
+        from .order_status import sync_order_kitchen_status
+
+        sync_order_kitchen_status(item.order)
         return JsonResponse({"ok": True, "id": item.pk, "status": item.status})
 
 
@@ -449,4 +442,7 @@ class OrderItemReadyAPIView(RoleRequiredMixin, View):
         if hasattr(request.user, "employee"):
             item.ready_by = request.user.employee
         item.save(update_fields=["status", "ready_at", "ready_by"])
+        from .order_status import sync_order_kitchen_status
+
+        sync_order_kitchen_status(item.order)
         return JsonResponse({"ok": True, "id": item.pk, "status": item.status})

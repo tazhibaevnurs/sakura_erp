@@ -3,11 +3,14 @@ from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import include, path
 
+from apps.core.views import health
+
 admin.site.site_header = "Сакура — администрирование"
 admin.site.site_title = "Сакура"
 admin.site.index_title = "Панель управления"
 
 urlpatterns = [
+    path("health/", health, name="health"),
     path("admin/", admin.site.urls),
     path("", include("apps.tables.urls")),
     path("auth/", include("apps.accounts.urls")),
@@ -17,7 +20,8 @@ urlpatterns = [
     path("salary/", include("apps.salary.urls")),
     path("menu/", include("apps.menu.urls")),
     path("reports/", include("apps.reports.urls")),
-    path("assistant/", include("apps.assistant.urls")),
+    path("assistant/", include("apps.ai_assistant.urls", namespace="ai_assistant")),
+    path("ai-assistant/", include("apps.ai_assistant.webhook_urls")),
     path("staff/", include("apps.accounts.staff_urls")),
 ]
 

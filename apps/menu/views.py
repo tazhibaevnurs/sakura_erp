@@ -1,6 +1,8 @@
 from django.contrib import messages
-from django.shortcuts import redirect
+from django.http import JsonResponse
+from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
+from django.views import View
 from django.views.generic import CreateView, ListView, UpdateView
 
 from apps.core.mixins import RoleRequiredMixin
@@ -17,6 +19,20 @@ class MenuManageView(RoleRequiredMixin, ListView):
 
     def get_queryset(self):
         return MenuCategory.objects.prefetch_related("items").order_by("order")
+
+
+class ToggleStopListView(RoleRequiredMixin, View):
+    allowed_roles = ["admin", "owner"]
+
+    def post(self, request, pk):
+        item = get_object_or_404(MenuItem, pk=pk)
+        item.is_stopped = not item.is_stopped
+        item.save(update_fields=["is_stopped"])
+        if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+            return JsonResponse({"ok": True, "is_stopped": item.is_stopped})
+        state = "в стоп-листе" if item.is_stopped else "доступно"
+        messages.success(request, f"«{item.name}» — {state}")
+        return redirect("menu:manage")
 
 
 class MenuItemCreateView(RoleRequiredMixin, CreateView):

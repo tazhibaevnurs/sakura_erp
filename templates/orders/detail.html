@@ -1,14 +1,14 @@
 {% extends "base.html" %}
-{% load crispy_forms_tags %}
+{% load crispy_forms_tags static %}
 {% block title %}Заказ #{{ order.pk }} — Сакура{% endblock %}
 {% block content %}
 <div class="action-bar">
   <div>
     <h1 class="h3 fw-bold mb-0">Заказ #{{ order.pk }}{% if order.table %} · кабинка {{ order.table.number }}{% elif order.order_type == 'delivery' %} · доставка{% elif order.order_type == 'takeaway' %} · навынос{% endif %}</h1>
-    <span class="badge badge-status bg-secondary">{{ order.get_status_display }}</span>
+    <span class="badge badge-status {% if kitchen_status == 'Готово' %}bg-success{% elif kitchen_status == 'Готовится' %}bg-warning text-dark{% else %}bg-secondary{% endif %}" id="order-kitchen-status">{{ kitchen_status }}</span>
     <span class="ms-2 fs-4 fw-bold text-dark">{{ order.total }} сом</span>
   </div>
-  <a href="{% url 'tables:floor' %}" class="btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> Кабинки</a>
+  <a href="{% if order.order_type == 'takeaway' %}{% url 'orders:takeaway' %}{% elif order.order_type == 'delivery' %}{% url 'orders:delivery' %}{% else %}{% url 'tables:floor' %}{% endif %}" class="btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> Назад</a>
 </div>
 
 <div class="row g-4">
@@ -31,23 +31,43 @@
             </td>
           </tr>
           {% empty %}
-          <tr><td colspan="4" class="text-center text-muted py-4">Добавьте блюда из формы справа</td></tr>
+          <tr><td colspan="4" class="text-center text-muted py-4">Добавьте блюда из меню справа</td></tr>
           {% endfor %}
           </tbody>
         </table>
       </div>
     </div>
+
     {% if user_role != 'cook' and user_role != 'baker' and user_role != 'salad' and user_role != 'bbq' %}
     <div class="panel">
-      <div class="panel-header">Добавить блюдо</div>
-      <div class="panel-body">
-        <form method="post">{% csrf_token %}{{ add_form|crispy }}
-          <button name="add_item" class="btn btn-sakura"><i class="bi bi-plus-lg"></i> Добавить</button>
-        </form>
+      <div class="panel-header">Меню по категориям</div>
+      <div class="panel-body menu-grid">
+        {% for cat in menu_categories %}
+        <div class="menu-category-title">{{ cat.name }}</div>
+        <div class="row g-2 mb-2">
+          {% for item in cat.items.all %}
+          <div class="col-md-6 col-xl-4">
+            <form method="post" class="d-grid h-100">
+              {% csrf_token %}
+              <input type="hidden" name="add_item" value="1">
+              <input type="hidden" name="menu_item" value="{{ item.pk }}">
+              <input type="hidden" name="quantity" value="1">
+              <button type="submit" class="menu-item-btn text-start h-100">
+                <span class="d-block">{{ item.name }}</span>
+                <span class="text-muted small">{{ item.price }} сом / {{ item.get_unit_display }}</span>
+              </button>
+            </form>
+          </div>
+          {% endfor %}
+        </div>
+        {% empty %}
+        <p class="text-muted">Нет доступных блюд</p>
+        {% endfor %}
       </div>
     </div>
     {% endif %}
   </div>
+
   <div class="col-lg-5">
     {% if user_role == 'waiter' or user_role == 'admin' or user_role == 'owner' %}
     <div class="panel mb-3" id="kitchen-ready-panel">
@@ -63,24 +83,63 @@
       </div>
     </div>
     {% endif %}
-    {% if order.order_type == 'delivery' %}
+
+    {% if order.order_type == 'takeaway' or order.order_type == 'delivery' %}
     <div class="panel mb-3">
-      <div class="panel-header"><i class="bi bi-truck me-2"></i>Доставка</div>
+      <div class="panel-header"><i class="bi bi-person me-2"></i>Данные клиента</div>
       <div class="panel-body">
-        <dl class="row mb-0 small">
-          <dt class="col-sm-4">Имя</dt><dd class="col-sm-8">{{ order.customer_name }}</dd>
-          <dt class="col-sm-4">Телефон</dt>
-          <dd class="col-sm-8">{{ order.customer_phone }}{% if order.customer_phone_ext %} доб. {{ order.customer_phone_ext }}{% endif %}</dd>
-          <dt class="col-sm-4">Адрес</dt><dd class="col-sm-8">{{ order.delivery_address }}</dd>
-        </dl>
+        <form method="post">
+          {% csrf_token %}
+          <div class="mb-2">
+            <label class="form-label small fw-semibold">Имя *</label>
+            <input type="text" name="customer_name" class="form-control" value="{{ order.customer_name }}" required>
+          </div>
+          <div class="mb-2">
+            <label class="form-label small fw-semibold">Телефон *</label>
+            <input type="text" name="customer_phone" class="form-control" value="{{ order.customer_phone }}" required>
+          </div>
+          {% if order.order_type == 'delivery' %}
+          <div class="mb-2">
+            <label class="form-label small fw-semibold">Добавочный</label>
+            <input type="text" name="customer_phone_ext" class="form-control" value="{{ order.customer_phone_ext }}">
+          </div>
+          <div class="mb-2">
+            <label class="form-label small fw-semibold">Адрес *</label>
+            <textarea name="delivery_address" class="form-control" rows="2" required>{{ order.delivery_address }}</textarea>
+          </div>
+          {% endif %}
+          <div class="mb-2">
+            <label class="form-label small fw-semibold">Задаток (сом) *</label>
+            <input type="number" name="deposit" class="form-control" min="1" step="100" value="{{ order.deposit|default:0 }}" required>
+          </div>
+          <div class="row g-2 mb-3">
+            <div class="col-6">
+              <label class="form-label small fw-semibold">Примерная готовность — дата *</label>
+              <input type="date" name="ready_date" class="form-control"
+                value="{% if order.estimated_ready_at %}{{ order.estimated_ready_at|date:'Y-m-d' }}{% endif %}" required>
+            </div>
+            <div class="col-6">
+              <label class="form-label small fw-semibold">Время *</label>
+              <input type="time" name="ready_time" class="form-control" step="300"
+                value="{% if order.estimated_ready_at %}{{ order.estimated_ready_at|time:'H:i' }}{% endif %}" required>
+            </div>
+          </div>
+          <button name="save_guest_info" class="btn btn-outline-primary w-100">Сохранить данные</button>
+        </form>
+        {% if not can_send_kitchen %}
+        <div class="alert alert-warning small mt-2 mb-0">Заполните задаток и примерное время готовности перед отправкой на кухню.</div>
+        {% endif %}
       </div>
     </div>
     {% endif %}
+
     {% if user_role != 'cook' and user_role != 'baker' and user_role != 'salad' and user_role != 'bbq' %}
     <div class="panel">
       <div class="panel-body d-grid gap-2">
         <form method="post">{% csrf_token %}
-          <button name="send_kitchen" class="btn btn-warning w-100 py-2"><i class="bi bi-fire"></i> На кухню</button>
+          <button name="send_kitchen" class="btn btn-warning w-100 py-2" {% if not can_send_kitchen %}disabled{% endif %}>
+            <i class="bi bi-fire"></i> На кухню
+          </button>
         </form>
         {% if cash_closed %}
         <div class="alert alert-warning small mb-0 py-3 text-center">
@@ -106,6 +165,7 @@
 <script>
 (function() {
   const orderId = {{ order.pk }};
+  const statusBadge = document.getElementById('order-kitchen-status');
   const initialReady = [
     {% for item in order.items.all %}{% if item.status == 'ready' %}
     {
@@ -125,12 +185,24 @@
   const countBadge = document.getElementById('ready-count-badge');
   const seen = new Set();
 
-  function updateRowStatus(itemId, label) {
+  function updateRowStatus(itemId, label, status) {
     const row = document.querySelector(`#order-items-table tr[data-item-id="${itemId}"] .item-row-status`);
     if (row) {
-      row.className = 'badge item-row-status bg-success';
+      row.className = 'badge item-row-status ' + (
+        status === 'ready' ? 'bg-success' :
+        status === 'cooking' ? 'bg-warning text-dark' : 'bg-secondary'
+      );
       row.textContent = label;
     }
+  }
+
+  function setKitchenStatus(label) {
+    if (!statusBadge) return;
+    statusBadge.textContent = label;
+    statusBadge.className = 'badge badge-status ' + (
+      label === 'Готово' ? 'bg-success' :
+      label === 'Готовится' ? 'bg-warning text-dark' : 'bg-secondary'
+    );
   }
 
   function renderAlert(data, isNew) {
@@ -148,10 +220,12 @@
         <div class="order-ready-alert__meta">${data.kitchen_section}${cook}</div>
       </div>`;
     container.prepend(el);
-    updateRowStatus(data.id, data.status_label || 'Готово');
+    updateRowStatus(data.id, data.status_label || 'Готово', 'ready');
     countBadge.textContent = seen.size;
+    if (data.all_ready) setKitchenStatus('Готово');
+    else if (isNew) setKitchenStatus('Частично готово');
     if (isNew) {
-      document.getElementById('order-ready-sound')?.play();
+      document.getElementById('order-ready-sound')?.play().catch(() => {});
       setTimeout(() => el.classList.remove('order-ready-alert--new'), 3000);
     }
   }
@@ -168,4 +242,3 @@
 </script>
 {% endif %}
 {% endblock %}
-

@@ -92,24 +92,15 @@
 
         {% if reservation.status == 'active' %}
 
-        {% if not reservation.can_mark_arrival and not reservation.has_preorder %}
-
+        {% if not reservation.can_mark_arrival %}
         <p class="alert alert-info small mb-3">
-
-          Бронь ещё не началась. «Гость пришёл» станет доступно за 30 минут до начала.
-
-          Создайте предзаказ — блюда можно отправить на кухню заранее.
-
+          Бронь ещё не началась. «Гость пришёл» станет доступно в начале интервала брони.
+          {% if not reservation.has_preorder %}Создайте предзаказ — блюда можно отправить на кухню заранее.{% endif %}
         </p>
-
-        {% elif reservation.has_preorder and not reservation.can_mark_arrival %}
-
+        {% elif reservation.has_preorder %}
         <p class="alert alert-info small mb-3">
-
-          Предзаказ открыт. Добавьте блюда и нажмите «На кухню». «Гость пришёл» — за 30 минут до начала (или раньше, если в заказе уже есть позиции).
-
+          Предзаказ открыт. Добавьте блюда и нажмите «На кухню» в заказе.
         </p>
-
         {% endif %}
 
         <div class="d-grid gap-2">

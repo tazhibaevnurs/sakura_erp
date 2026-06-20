@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block title %}Диалоги — ИИ-ассистент{% endblock %}
+{% block content %}
+<div class="action-bar">
+  <div>
+    <a href="{% url 'ai_assistant:dashboard' %}" class="small text-muted text-decoration-none d-inline-block mb-1">← ИИ-ассистент</a>
+    <h1 class="h3 fw-bold mb-0">Диалоги</h1>
+  </div>
+  <a href="{% url 'ai_assistant:settings' %}" class="btn btn-sakura-outline btn-sm"><i class="bi bi-gear"></i> Настройки</a>
+</div>
+
+<div class="panel mb-4">
+  <div class="panel-body">
+    <form method="get" class="row g-2 align-items-end">
+      <div class="col-md-3">
+        <label class="form-label small">Канал</label>
+        <select name="channel" class="form-select form-select-sm">
+          <option value="">Все</option>
+          {% for val, label in channel_choices %}
+          <option value="{{ val }}" {% if filter_channel == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label small">Статус</label>
+        <select name="status" class="form-select form-select-sm">
+          <option value="">Все</option>
+          {% for val, label in status_choices %}
+          <option value="{{ val }}" {% if filter_status == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label small">Поиск</label>
+        <input type="text" name="q" value="{{ filter_q }}" class="form-control form-control-sm" placeholder="Имя, телефон, Telegram ID">
+      </div>
+      <div class="col-md-2 d-flex gap-2">
+        <button type="submit" class="btn btn-sakura btn-sm flex-grow-1">Фильтр</button>
+        <a href="{% url 'ai_assistant:dialogs' %}" class="btn btn-outline-secondary btn-sm">Сброс</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="panel-body panel-body--flush">
+    {% if conversations %}
+    <table class="table table-modern mb-0">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Клиент</th>
+          <th>Канал</th>
+          <th>Статус</th>
+          <th>Намерение</th>
+          <th>Сообщ.</th>
+          <th>Обновлён</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for conv in conversations %}
+      <tr>
+        <td class="text-muted">{{ conv.pk }}</td>
+        <td>
+          <div class="fw-semibold">{{ conv.client.name|default:"—" }}</div>
+          <small class="text-muted">{{ conv.client.phone|default:conv.client.telegram_id|default:"" }}</small>
+        </td>
+        <td>{{ conv.get_channel_display }}</td>
+        <td><span class="badge bg-light text-dark">{{ conv.get_status_display }}</span></td>
+        <td>{{ conv.current_intent|default:"—" }}</td>
+        <td>{{ conv.msg_count }}</td>
+        <td class="small text-muted">{{ conv.updated_at|date:"d.m.Y H:i" }}</td>
+        <td class="text-end">
+          <a href="{% url 'ai_assistant:dialog_detail' conv.pk %}" class="btn btn-sm btn-sakura-outline">Открыть</a>
+        </td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="empty-state py-5">
+      <i class="bi bi-chat-left-text d-block"></i>
+      <p class="mb-0">Диалоги не найдены</p>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+{% if page_obj.has_other_pages %}
+<nav class="mt-3">
+  <ul class="pagination pagination-sm justify-content-center">
+    {% if page_obj.has_previous %}
+    <li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}&channel={{ filter_channel }}&status={{ filter_status }}&q={{ filter_q }}">←</a></li>
+    {% endif %}
+    <li class="page-item disabled"><span class="page-link">{{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</span></li>
+    {% if page_obj.has_next %}
+    <li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}&channel={{ filter_channel }}&status={{ filter_status }}&q={{ filter_q }}">→</a></li>
+    {% endif %}
+  </ul>
+</nav>
+{% endif %}
+{% endblock %}

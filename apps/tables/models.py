@@ -84,6 +84,20 @@ class Table(models.Model):
     def upcoming_reservations(self, limit=10):
         return upcoming_reservations_for_table(self, limit=limit)
 
+    @property
+    def assigned_waiters(self):
+        return [
+            a.waiter
+            for a in self.waiter_assignments.filter(is_active=True)
+            .select_related("waiter__user")
+            .order_by("assigned_at", "pk")
+        ]
+
+    @property
+    def assigned_waiter(self):
+        waiters = self.assigned_waiters
+        return waiters[0] if waiters else None
+
     def can_reserve_at(self, start, end):
         from datetime import timedelta
 
@@ -163,15 +177,11 @@ class TableReservation(models.Model):
 
     @property
     def can_mark_arrival(self):
-        from datetime import timedelta
-
         if self.status != self.Status.ACTIVE:
             return False
         now = timezone.now()
         if now >= self.reserved_until:
             return False
-        if self.order_id and self.order.items.exists():
-            return now >= self.reserved_for - timedelta(minutes=30)
         from .reservation_time import is_reservation_current
 
         return is_reservation_current(self)
@@ -183,3 +193,39 @@ class TableReservation(models.Model):
         if start.date() == end.date():
             return f"{start.strftime('%d.%m.%Y %H:%M')} – {end.strftime('%H:%M')}"
         return f"{start.strftime('%d.%m %H:%M')} – {end.strftime('%d.%m %H:%M')}"
+
+
+class TableWaiterAssignment(models.Model):
+    table = models.ForeignKey(
+        Table,
+        on_delete=models.CASCADE,
+        related_name="waiter_assignments",
+        verbose_name="Кабинка",
+    )
+    waiter = models.ForeignKey(
+        "accounts.Employee",
+        on_delete=models.CASCADE,
+        related_name="table_assignments",
+        verbose_name="Официант",
+    )
+    assigned_by = models.ForeignKey(
+        "accounts.Employee",
+        on_delete=models.PROTECT,
+        related_name="waiter_assignments_made",
+        verbose_name="Назначил",
+    )
+    is_active = models.BooleanField(default=True, verbose_name="Активно")
+    assigned_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Назначение официанта"
+        verbose_name_plural = "Назначения официантов"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["table", "waiter"],
+                name="unique_waiter_assignment_per_table",
+            )
+        ]
+
+    def __str__(self):
+        return f"Кабинка {self.table.number} — {self.waiter}"

@@ -41,7 +41,11 @@ def find_menu_item(name: str) -> MenuItem | None:
     if not query:
         return None
 
-    items = list(MenuItem.objects.filter(is_available=True).select_related("category"))
+    items = list(
+        MenuItem.objects.filter(is_available=True, is_stopped=False).select_related(
+            "category"
+        )
+    )
     lowered = query.lower()
 
     for item in items:

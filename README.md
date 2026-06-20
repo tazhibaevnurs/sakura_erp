@@ -51,8 +51,41 @@ python manage.py runserver
 
 Сайт: http://127.0.0.1:8000/
 
-Локальный dev использует **SQLite** и in-memory Channels/Celery (Redis не нужен).
+Локальный dev использует **SQLite** и in-memory Channels/Celery (**Redis не нужен**).  
+Шаблон `.env`: `copy .env.local.example .env` → запуск `.\run-local.ps1`
 
-## Production (Docker)
+### ИИ-ассистент (локально)
 
-См. `deploy/README.md`
+```powershell
+# Терминал 1 — Django
+.\run-local.ps1
+
+# Терминал 2 — ngrok для Telegram webhook
+ngrok http 8888
+# В .env: ASSISTANT_PUBLIC_URL=https://xxxx.ngrok-free.app
+python manage.py register_telegram_webhook
+```
+
+Celery worker **не нужен** — см. `docs/AI_ASSISTANT.md`
+
+## Production (сервер)
+
+Шаблон `.env`: `copy .env.prod.example .env`  
+**Redis + Celery worker обязательны.**
+
+```powershell
+# Windows
+.\deploy\up-prod.ps1
+
+# Linux
+chmod +x deploy/up-prod.sh && ./deploy/up-prod.sh
+```
+
+Проверка перед деплоем:
+```powershell
+$env:DJANGO_SETTINGS_MODULE = "config.settings.prod"
+python manage.py check_deploy
+python manage.py check --deploy
+```
+
+Подробнее: `deploy/README.md` и `docs/AI_ASSISTANT.md`

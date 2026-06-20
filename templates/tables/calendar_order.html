@@ -172,10 +172,23 @@
           <dt class="col-sm-4">Стол</dt>
           <dd class="col-sm-8 fw-semibold">№{{ selected_table.number }} · {{ selected_table.get_type_display }} ({{ selected_table.capacity }} мест)</dd>
         </dl>
-        <p class="text-muted small">Будет создана бронь на выбранное время и открыт предзаказ — добавьте блюда и отправьте на кухню.</p>
-        <form method="post" novalidate>
+        <p class="text-muted small">Будет создана бронь и предзаказ — добавьте блюда из меню.</p>
+        <form method="post" novalidate id="calendar-order-form">
           {% csrf_token %}
           {{ form|crispy }}
+          <input type="hidden" name="cart_json" id="co-cart-json" value="[]">
+          <div class="row g-4 mt-1">
+            <div class="col-lg-7">
+              <label class="form-label fw-semibold">Меню по категориям</label>
+              <div class="menu-grid" id="co-menu"></div>
+            </div>
+            <div class="col-lg-5">
+              <div class="panel border">
+                <div class="panel-header py-2">Корзина <span class="badge bg-secondary" id="co-cart-total">0 сом</span></div>
+                <div class="panel-body" id="co-cart"></div>
+              </div>
+            </div>
+          </div>
           <div class="d-grid gap-2 mt-4">
             <button type="submit" class="btn btn-sakura btn-lg py-2">
               <i class="bi bi-check-lg"></i> Принять заказ
@@ -191,7 +204,7 @@
 
 {% block scripts %}
 {% if step == 'time' %}
-<script src="{% static 'js/sakura-clock.js' %}"></script>
+<script src="{% static 'js/sakura-clock.js' %}?v=5"></script>
 <script>
 document.addEventListener('DOMContentLoaded', () => {
   const booked = {{ booked_slots_json|safe }};
@@ -219,6 +232,31 @@ document.addEventListener('DOMContentLoaded', () => {
   visibleStart.addEventListener('change', syncHidden);
   visibleEnd.addEventListener('change', syncHidden);
   syncHidden();
+});
+</script>
+{% elif step == 'order' %}
+<script src="{% static 'js/order-menu.js' %}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', async () => {
+  const cart = SakuraOrderMenu.createCart();
+  const cartEl = document.getElementById('co-cart');
+  const totalEl = document.getElementById('co-cart-total');
+  const refreshCart = () => {
+    SakuraOrderMenu.renderCart(cartEl, cart, refreshCart);
+    totalEl.textContent = cart.total().toFixed(0) + ' сом';
+    document.getElementById('co-cart-json').value = JSON.stringify(cart.payload());
+  };
+  const categories = await SakuraOrderMenu.fetchMenu('{% url "orders:api_menu" %}');
+  SakuraOrderMenu.mountMenu(document.getElementById('co-menu'), categories, (item) => {
+    cart.add(item); refreshCart();
+  });
+  refreshCart();
+  document.getElementById('calendar-order-form')?.addEventListener('submit', (e) => {
+    if (!cart.items.length) {
+      e.preventDefault();
+      alert('Добавьте хотя бы одно блюдо в заказ.');
+    }
+  });
 });
 </script>
 {% endif %}

@@ -145,6 +145,32 @@ def _table_capacity_label(table):
     return f"кабинке №{table.number}"
 
 
+def _unlink_order_from_reservation(order):
+    try:
+        res = order.table_reservation
+    except TableReservation.DoesNotExist:
+        return
+    if res.order_id == order.pk:
+        res.order = None
+        res.save(update_fields=["order"])
+
+
+def _order_available_for_reservation(order, reservation):
+    """Можно ли привязать заказ к этой брони (OneToOne на order_id)."""
+    if reservation.order_id == order.pk:
+        return True
+    try:
+        linked = order.table_reservation
+    except TableReservation.DoesNotExist:
+        return True
+    if linked.pk == reservation.pk:
+        return True
+    if linked.status != TableReservation.Status.ACTIVE:
+        _unlink_order_from_reservation(order)
+        return True
+    return False
+
+
 @transaction.atomic
 def create_preorder_for_reservation(reservation, employee):
     """Создать заказ заранее: блюда на кухню до прихода гостя."""
@@ -157,7 +183,6 @@ def create_preorder_for_reservation(reservation, employee):
     table = reservation.table
     other = (
         Order.objects.filter(table=table)
-        .exclude(pk=reservation.order_id)
         .filter(
             status__in=[
                 Order.Status.OPEN,
@@ -167,12 +192,17 @@ def create_preorder_for_reservation(reservation, employee):
                 Order.Status.SERVED,
             ]
         )
+        .order_by("-created_at")
         .first()
     )
-    if other:
-        raise ReservationError(
-            f"По кабинке уже есть заказ #{other.pk}. Откройте его или закройте перед предзаказом."
-        )
+    if other and _order_available_for_reservation(other, reservation):
+        if other.waiter_id != employee.pk:
+            other.waiter = employee
+            other.save(update_fields=["waiter"])
+        reservation.order = other
+        reservation.save(update_fields=["order"])
+        sync_table_reserved_status(table)
+        return other
 
     comment_parts = [
         f"Бронь: {reservation.guest_name}",
@@ -201,15 +231,6 @@ def complete_reservation_arrival(reservation):
     now = timezone.now()
     if now >= reservation.reserved_until:
         raise ReservationError("Время брони уже истекло.")
-
-    has_preorder = bool(
-        reservation.order_id and reservation.order.items.exists()
-    )
-    if not has_preorder:
-        if not (reservation.reserved_for - timedelta(minutes=30) <= now):
-            raise ReservationError(
-                "Отметить прибытие можно не раньше чем за 30 минут до начала брони."
-            )
 
     table = reservation.table
     reservation.status = TableReservation.Status.COMPLETED

@@ -1,111 +1,364 @@
 {% extends "base.html" %}
+
 {% load static %}
+
 {% block title %}Кабинки — Сакура{% endblock %}
+
 {% block content %}
+
 <div class="page-header d-flex flex-wrap justify-content-between align-items-start gap-3">
+
   <div>
+
     <h1 class="mb-1">Кабинки</h1>
+
     <p class="page-subtitle mb-0">Одна кабинка — несколько броней в разное время (без пересечений)</p>
+
   </div>
+
   <div class="d-flex flex-wrap gap-2 align-items-center">
+
     <a href="{% url 'tables:reservation_list' %}" class="btn btn-sakura-outline btn-sm">
+
       <i class="bi bi-calendar-week"></i> Все брони
+
     </a>
+
+    <span class="floor-live-badge" id="floor-live-badge" title="Обновление статусов">
+
+      <span class="floor-live-badge__dot"></span>
+
+      <span class="floor-live-badge__text">Live</span>
+
+    </span>
+
     <div class="booth-legend d-flex flex-wrap gap-2">
+
       <span class="booth-legend__item booth-legend__item--free"><i class="bi bi-circle-fill"></i> Свободен</span>
+
       <span class="booth-legend__item booth-legend__item--busy"><i class="bi bi-circle-fill"></i> Занят</span>
+
       <span class="booth-legend__item booth-legend__item--pay"><i class="bi bi-circle-fill"></i> Ожидает оплаты</span>
+
       <span class="booth-legend__item booth-legend__item--booked"><i class="bi bi-circle-fill"></i> Зарезервирован</span>
+
       <span class="booth-legend__item booth-legend__item--booking-now"><i class="bi bi-circle-fill"></i> Сейчас бронь</span>
+
     </div>
+
   </div>
+
 </div>
+
+
 
 <div class="floor-layout">
+
   <aside class="sakura-clock-panel">
+
     <div id="live-clock"></div>
+
   </aside>
 
+
+
   <div class="floor-main">
+
     {% if upcoming_reservations %}
+
     <div class="panel mb-3">
+
       <div class="panel-header"><i class="bi bi-clock me-2"></i>Ближайшие брони</div>
+
       <div class="panel-body py-2">
+
         <div class="d-flex flex-wrap gap-2">
+
           {% for r in upcoming_reservations %}
+
           <a href="{% url 'tables:reservation_detail' r.pk %}" class="btn btn-sm btn-outline-primary">
+
             №{{ r.table.number }} · {{ r.guest_name }} · {{ r.reserved_for|date:"d.m" }} {{ r.reserved_for|time:"H:i" }}–{{ r.reserved_until|time:"H:i" }}
+
           </a>
+
           {% endfor %}
+
         </div>
+
       </div>
+
     </div>
+
     {% endif %}
 
+
+
     <div class="booths-panel" x-data="floorPlan()" x-init="init()">
+
       <div class="booths-grid">
+
         {% for table in tables %}
+
         {% with ds=table.display_status card=table.floor_card_style res=table.floor_reservation %}
+
         <a href="{% url 'tables:booth' table.pk %}"
+
            class="booth-card booth-card--{{ card }}"
+
            data-table-id="{{ table.pk }}"
+
            data-status="{{ card }}"
+
            data-hub-url="{% url 'tables:booth' table.pk %}">
+
           <span class="booth-card__number">{{ table.number }}</span>
+
           <span class="booth-card__type">{{ table.get_type_display }}</span>
+
           <span class="booth-card__status">
+
             {% if ds == 'free' %}Свободен{% elif ds == 'occupied' %}Занят{% elif ds == 'waiting_payment' %}Ожидает оплаты{% elif ds == 'reserved' and res.is_current %}Сейчас бронь{% elif ds == 'reserved' %}Зарезервирован{% else %}{{ table.get_status_display }}{% endif %}
+
           </span>
-          {% if ds == 'reserved' and res %}
-          <span class="booth-card__guest">{{ res.guest_name|truncatechars:14 }}</span>
-          <span class="booth-card__time">{{ res.reserved_for|date:"d.m" }} {{ res.reserved_for|time:"H:i" }}–{{ res.reserved_until|time:"H:i" }}</span>
-          {% else %}
-          <span class="booth-card__seats">{{ table.capacity }} {% if table.capacity == 1 %}место{% elif table.capacity < 5 %}места{% else %}мест{% endif %}</span>
-          {% endif %}
+
+          <span class="booth-card__guest" {% if ds != 'reserved' or not res %}hidden{% endif %}>{% if ds == 'reserved' and res %}{{ res.guest_name|truncatechars:14 }}{% endif %}</span>
+
+          <span class="booth-card__time" {% if ds != 'reserved' or not res %}hidden{% endif %}>{% if ds == 'reserved' and res %}{{ res.reserved_for|date:"d.m" }} {{ res.reserved_for|time:"H:i" }}–{{ res.reserved_until|time:"H:i" }}{% endif %}</span>
+
+          <span class="booth-card__seats" {% if ds == 'reserved' and res %}hidden{% endif %}>{{ table.capacity }} {% if table.capacity == 1 %}место{% elif table.capacity < 5 %}места{% else %}мест{% endif %}</span>
+          <span class="booth-card__waiters" {% if not table.waiter_assignments.all %}hidden{% endif %}>
+            {% for assignment in table.waiter_assignments.all %}
+            <span class="booth-card__waiter-tag"><i class="bi bi-person-fill"></i> {{ assignment.waiter|truncatechars:18 }}</span>
+            {% endfor %}
+          </span>
+
         </a>
+
         {% endwith %}
+
         {% empty %}
+
         <div class="booths-empty">
+
           <i class="bi bi-columns-gap display-4 text-muted"></i>
+
           <p class="mt-3 mb-2">Кабинки ещё не добавлены</p>
+
         </div>
+
         {% endfor %}
+
       </div>
+
     </div>
+
   </div>
+
 </div>
+
 {% endblock %}
+
 {% block scripts %}
+
 <script src="{% static 'js/sakura-clock.js' %}"></script>
+
 <script>
+
 document.addEventListener('DOMContentLoaded', () => {
+
   SakuraClock.mountLive(document.getElementById('live-clock'));
+
 });
 
+
+
 function floorPlan() {
+
   const statusClass = {
+
     free: 'booth-card--free',
+
     occupied: 'booth-card--occupied',
+
     waiting_payment: 'booth-card--waiting_payment',
+
     booked: 'booth-card--booked',
+
     booking_now: 'booth-card--booking_now',
+
   };
-  return {
-    init() { this.refresh(); setInterval(() => this.refresh(), 30000); },
-    async refresh() {
-      const r = await fetch('{% url "tables:api_status" %}');
-      const data = await r.json();
-      data.tables.forEach(t => {
-        const el = document.querySelector(`[data-table-id="${t.id}"]`);
-        if (!el) return;
-        el.dataset.status = t.status;
-        el.className = `booth-card ${statusClass[t.status] || 'booth-card--free'}`;
-        if (t.hub_url) el.href = t.hub_url;
-        const statusEl = el.querySelector('.booth-card__status');
-        if (statusEl && t.status_label) statusEl.textContent = t.status_label;
-      });
+
+
+
+  function truncate(str, len) {
+
+    if (!str) return '';
+
+    return str.length > len ? `${str.slice(0, len - 1)}…` : str;
+
+  }
+
+
+
+  function updateCard(el, t) {
+
+    const snap = JSON.stringify(t);
+
+    if (el.dataset.snapshot && el.dataset.snapshot !== snap) {
+
+      el.classList.add('booth-card--flash');
+
+      setTimeout(() => el.classList.remove('booth-card--flash'), 700);
+
     }
+
+    el.dataset.snapshot = snap;
+
+    el.dataset.status = t.status;
+
+    el.className = `booth-card ${statusClass[t.status] || 'booth-card--free'}`;
+
+    if (t.hub_url) el.href = t.hub_url;
+
+
+
+    const statusEl = el.querySelector('.booth-card__status');
+
+    if (statusEl) statusEl.textContent = t.status_label || '';
+
+
+
+    const guestEl = el.querySelector('.booth-card__guest');
+
+    const timeEl = el.querySelector('.booth-card__time');
+
+    const seatsEl = el.querySelector('.booth-card__seats');
+
+    const waiterEl = el.querySelector('.booth-card__waiters');
+
+
+
+    if (t.show_reservation) {
+
+      if (guestEl) {
+
+        guestEl.hidden = false;
+
+        guestEl.textContent = truncate(t.guest_name, 14);
+
+      }
+
+      if (timeEl) {
+
+        timeEl.hidden = false;
+
+        timeEl.textContent = t.time_range || '';
+
+      }
+
+      if (seatsEl) seatsEl.hidden = true;
+
+    } else {
+
+      if (guestEl) guestEl.hidden = true;
+
+      if (timeEl) timeEl.hidden = true;
+
+      if (seatsEl) {
+
+        seatsEl.hidden = false;
+
+        seatsEl.textContent = t.seats_label || '';
+
+      }
+
+    }
+
+
+
+    if (waiterEl) {
+      const waiters = t.waiters || [];
+      if (waiters.length) {
+        waiterEl.hidden = false;
+        waiterEl.innerHTML = waiters.map((w) =>
+          `<span class="booth-card__waiter-tag"><i class="bi bi-person-fill"></i> ${truncate(w.name, 18)}</span>`
+        ).join('');
+      } else {
+        waiterEl.hidden = true;
+        waiterEl.innerHTML = '';
+      }
+    }
+
+  }
+
+
+
+  return {
+
+    polling: null,
+
+    init() {
+
+      document.querySelectorAll('[data-table-id]').forEach(el => {
+
+        el.dataset.snapshot = el.dataset.snapshot || '';
+
+      });
+
+      this.refresh();
+
+      this.polling = setInterval(() => this.refresh(), 15000);
+
+    },
+
+    async refresh() {
+
+      const badge = document.getElementById('floor-live-badge');
+
+      badge?.classList.add('is-syncing');
+
+      try {
+
+        const r = await fetch('{% url "tables:api_status" %}', {
+
+          headers: { Accept: 'application/json' },
+
+        });
+
+        const data = await r.json();
+
+        data.tables.forEach(t => {
+
+          const el = document.querySelector(`[data-table-id="${t.id}"]`);
+
+          if (el) updateCard(el, t);
+
+        });
+
+        badge?.classList.add('is-ok');
+
+        setTimeout(() => badge?.classList.remove('is-ok'), 1200);
+
+      } catch (_) {
+
+        badge?.classList.add('is-error');
+
+        setTimeout(() => badge?.classList.remove('is-error'), 2000);
+
+      } finally {
+
+        badge?.classList.remove('is-syncing');
+
+      }
+
+    },
+
   };
+
 }
+
 </script>
+
 {% endblock %}
+

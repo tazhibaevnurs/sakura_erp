@@ -34,7 +34,16 @@ class MenuItem(models.Model):
     )
     description = models.TextField(blank=True)
     is_available = models.BooleanField(default=True)
+    is_stopped = models.BooleanField(
+        default=False,
+        verbose_name="Стоп-лист",
+        help_text="Временно недоступно для заказа",
+    )
     order = models.PositiveSmallIntegerField(default=0)
+
+    @property
+    def is_orderable(self):
+        return self.is_available and not self.is_stopped
 
     class Meta:
         ordering = ["order", "name"]

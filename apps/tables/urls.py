@@ -25,6 +25,7 @@ urlpatterns = [
         name="reservation_preorder",
     ),
     path("<int:pk>/", views.TableHubView.as_view(), name="booth"),
+    path("<int:pk>/assign-waiter/", views.AssignWaiterView.as_view(), name="assign_waiter"),
     path("<int:pk>/reserve/", views.ReserveTableView.as_view(), name="reserve"),
     path("api/status/", views.TableStatusAPIView.as_view(), name="api_status"),
 ]

@@ -18,8 +18,19 @@
       <tr>
         <td class="fw-semibold">{{ item.name }}</td>
         <td><strong>{{ item.price }}</strong> сом / {{ item.get_unit_display }}</td>
-        <td>{% if not item.is_available %}<span class="badge bg-secondary">нет в наличии</span>{% endif %}</td>
-        <td class="text-end"><a href="{% url 'menu:item_edit' item.pk %}" class="btn btn-sm btn-sakura-outline">Изменить</a></td>
+        <td>
+          {% if not item.is_available %}<span class="badge bg-secondary">нет в наличии</span>{% endif %}
+          {% if item.is_stopped %}<span class="badge bg-danger">стоп-лист</span>{% endif %}
+        </td>
+        <td class="text-end">
+          <form method="post" action="{% url 'menu:item_stop' item.pk %}" class="d-inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-sm {% if item.is_stopped %}btn-outline-success{% else %}btn-outline-danger{% endif %}">
+              {% if item.is_stopped %}Вернуть{% else %}Стоп-лист{% endif %}
+            </button>
+          </form>
+          <a href="{% url 'menu:item_edit' item.pk %}" class="btn btn-sm btn-sakura-outline">Изменить</a>
+        </td>
       </tr>
       {% empty %}
       <tr><td class="text-muted py-3">Нет блюд</td></tr>

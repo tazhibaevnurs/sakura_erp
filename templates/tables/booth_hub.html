@@ -4,7 +4,12 @@
 <div class="page-header">
   <a href="{% url 'tables:floor' %}" class="btn btn-outline-secondary btn-sm mb-3"><i class="bi bi-arrow-left"></i> Кабинки</a>
   <h1 class="mb-1">Кабинка {{ table.number }}</h1>
-  <p class="page-subtitle mb-0">{{ table.get_type_display }} · {{ table.capacity }} мест</p>
+  <p class="page-subtitle mb-0" data-waiter-subtitle>
+    {{ table.get_type_display }} · {{ table.capacity }} мест
+    <span data-waiter-badge {% if not assigned_waiters %}class="d-none"{% endif %}>
+      · <i class="bi bi-person-badge"></i> <span data-waiter-names>{% for w in assigned_waiters %}{% if not forloop.first %}, {% endif %}{{ w }}{% endfor %}</span>
+    </span>
+  </p>
 </div>
 
 <div class="row g-4">
@@ -22,8 +27,8 @@
           <i class="bi bi-plus-circle"></i> Открыть заказ сейчас
         </a>
         {% endif %}
-        <a href="{% url 'tables:reserve' table.pk %}" class="btn btn-outline-primary btn-lg">
-          <i class="bi bi-calendar-plus"></i> Забронировать на время
+        <a href="{{ calendar_order_url }}" class="btn btn-outline-primary btn-lg">
+          <i class="bi bi-calendar-event"></i> Приём заказа
         </a>
         {% if reservation %}
         <a href="{% url 'tables:reservation_detail' reservation.pk %}" class="btn btn-info text-white">
@@ -32,6 +37,54 @@
         {% endif %}
       </div>
     </div>
+
+    {% if user_role == 'admin' or user_role == 'owner' %}
+    <div class="panel waiter-assign-panel"
+         id="waiter-picker-panel"
+         data-url="{% url 'tables:assign_waiter' table.pk %}"
+         data-initial-ids="{{ assigned_waiter_ids_json|escape }}">
+      <div class="panel-header d-flex align-items-center justify-content-between gap-2">
+        <span><i class="bi bi-people me-2"></i>Официанты кабинки</span>
+        <span class="waiter-assign-status d-none" id="waiter-assign-status"></span>
+      </div>
+      <div class="panel-body" id="waiter-picker-body">
+        <p class="text-muted small mb-3">Нажмите на имя — можно выбрать несколько. Сохраняется автоматически.</p>
+        <div class="waiter-picker-grid" id="waiter-picker-grid">
+          {% for w in waiters %}
+          <button type="button"
+                  class="waiter-chip{% if w.pk in assigned_waiter_ids %} waiter-chip--active{% endif %}"
+                  data-waiter-id="{{ w.pk }}">
+            <i class="bi bi-person-fill"></i>
+            <span>{{ w }}</span>
+            <i class="bi bi-check-lg waiter-chip__check{% if w.pk not in assigned_waiter_ids %} d-none{% endif %}"></i>
+          </button>
+          {% empty %}
+          <div class="waiter-picker-empty">
+            <i class="bi bi-person-x display-6 text-muted"></i>
+            <p class="mb-1 fw-semibold">Нет официантов в системе</p>
+            <p class="text-muted small mb-0">Добавьте сотрудника с ролью «Официант» в админке — он появится здесь.</p>
+          </div>
+          {% endfor %}
+        </div>
+        <p class="waiter-picker-summary mb-0 mt-3{% if not assigned_waiter_ids %} d-none{% endif %}" id="waiter-picker-summary">
+          <strong id="waiter-picker-count">{{ assigned_waiter_ids|length }}</strong>
+          <span id="waiter-picker-count-label">{% if assigned_waiter_ids|length == 1 %}официант{% elif assigned_waiter_ids|length < 5 %}официанта{% else %}официантов{% endif %}</span>
+        </p>
+        <p class="text-muted small mb-0 mt-2{% if assigned_waiter_ids %} d-none{% endif %}" id="waiter-picker-none">Официанты не назначены</p>
+      </div>
+    </div>
+    {% elif assigned_waiters %}
+    <div class="panel">
+      <div class="panel-header"><i class="bi bi-people me-2"></i>Официанты</div>
+      <div class="panel-body">
+        <div class="waiter-readonly-list">
+          {% for w in assigned_waiters %}
+          <span class="waiter-readonly-tag"><i class="bi bi-person-fill"></i> {{ w }}</span>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+    {% endif %}
   </div>
 
   <div class="col-lg-7">
@@ -63,4 +116,99 @@
     </div>
   </div>
 </div>
+{% endblock %}
+{% block scripts %}
+<script>
+(function () {
+  const panel = document.getElementById('waiter-picker-panel');
+  if (!panel) return;
+
+  const url = panel.dataset.url;
+  let selected = new Set(JSON.parse(panel.dataset.initialIds || '[]').map(String));
+  let saving = false;
+
+  const body = document.getElementById('waiter-picker-body');
+  const statusEl = document.getElementById('waiter-assign-status');
+  const summaryEl = document.getElementById('waiter-picker-summary');
+  const countEl = document.getElementById('waiter-picker-count');
+  const countLabelEl = document.getElementById('waiter-picker-count-label');
+  const noneEl = document.getElementById('waiter-picker-none');
+
+  function countLabel(n) {
+    if (n === 1) return 'официант';
+    if (n >= 2 && n <= 4) return 'официанта';
+    return 'официантов';
+  }
+
+  function syncUi() {
+    panel.querySelectorAll('[data-waiter-id]').forEach((btn) => {
+      const id = btn.dataset.waiterId;
+      const active = selected.has(id);
+      btn.classList.toggle('waiter-chip--active', active);
+      btn.querySelector('.waiter-chip__check')?.classList.toggle('d-none', !active);
+    });
+    const n = selected.size;
+    if (summaryEl) {
+      summaryEl.classList.toggle('d-none', n === 0);
+      if (countEl) countEl.textContent = n;
+      if (countLabelEl) countLabelEl.textContent = countLabel(n);
+    }
+    if (noneEl) noneEl.classList.toggle('d-none', n > 0);
+  }
+
+  function setStatus(text, cls) {
+    if (!statusEl) return;
+    statusEl.textContent = text;
+    statusEl.className = `waiter-assign-status ${cls || ''}`.trim();
+    statusEl.classList.toggle('d-none', !text);
+  }
+
+  function updateSubtitle(waiters) {
+    const badge = document.querySelector('[data-waiter-badge]');
+    const namesEl = document.querySelector('[data-waiter-names]');
+    if (!badge || !namesEl) return;
+    if (waiters.length) {
+      namesEl.textContent = waiters.map((w) => w.name).join(', ');
+      badge.classList.remove('d-none');
+    } else {
+      namesEl.textContent = '';
+      badge.classList.add('d-none');
+    }
+  }
+
+  async function save() {
+    if (saving) return;
+    saving = true;
+    body?.classList.add('is-saving');
+    setStatus('Сохранение…', 'text-muted');
+    try {
+      const data = await SakuraUI.postForm(url, { waiter_ids: [...selected] });
+      SakuraUI.toast(data.message, data.level || 'success');
+      setStatus('Сохранено', 'text-success');
+      updateSubtitle(data.waiters || []);
+      setTimeout(() => setStatus('', ''), 2200);
+    } catch (err) {
+      SakuraUI.toast(err.message, 'danger');
+      setStatus('Ошибка', 'text-danger');
+    } finally {
+      saving = false;
+      body?.classList.remove('is-saving');
+      panel.querySelectorAll('[data-waiter-id]').forEach((b) => { b.disabled = false; });
+    }
+  }
+
+  panel.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-waiter-id]');
+    if (!btn || saving) return;
+    const id = btn.dataset.waiterId;
+    if (selected.has(id)) selected.delete(id);
+    else selected.add(id);
+    syncUi();
+    panel.querySelectorAll('[data-waiter-id]').forEach((b) => { b.disabled = true; });
+    save();
+  });
+
+  syncUi();
+})();
+</script>
 {% endblock %}
