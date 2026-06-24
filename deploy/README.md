@@ -1,44 +1,47 @@
 # Деплой на сервер (Docker)
 
+Все команды — **из корня проекта** (`~/sakura_erp/`), папку `deploy/` открывать не нужно.
+
 ## Быстрый старт (production)
 
 ```bash
-# 1. Настройте окружение
+# 1. Настройте окружение (в корне проекта)
 cp .env.prod.example .env
 # Отредактируйте: DJANGO_SECRET_KEY, DB_PASSWORD, DJANGO_ALLOWED_HOSTS, ASSISTANT_PUBLIC_URL
 
 # 2. Запуск (Linux/macOS)
-chmod +x deploy/up-prod.sh
-./deploy/up-prod.sh
+chmod +x compose.sh up-prod.sh
+./up-prod.sh
 
 # 2. Запуск (Windows)
-.\deploy\up-prod.ps1
+.\up-prod.ps1
 ```
 
 Или вручную:
 
 ```bash
-cd deploy
-docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+./compose.sh prod up -d --build
 ```
 
-> **Важно:** не используйте `docker compose up` без `-f docker-compose.prod.yml` на сервере.  
-> Файл `docker-compose.dev.yml` — только для локальной разработки в Docker.
+> **Важно:** используйте `compose.sh` / `compose.ps1` — они автоматически подключают `.env` из корня.  
+> Без `--env-file` PostgreSQL получит пароль по умолчанию (`chaihana_secret`), а Django — из `.env`.
+
+> Не используйте профиль `dev` на сервере. `docker-compose.dev.yml` — только для локальной разработки.
 
 ## Первый запуск
 
 1. В `.env` задайте `CREATE_SUPERUSER=1`, `SUPERUSER_PASSWORD=...` **или** после старта:
    ```bash
-   docker compose -f docker-compose.yml -f docker-compose.prod.yml exec web python manage.py createsuperuser
+   ./compose.sh prod exec web python manage.py createsuperuser
    ```
 2. Проверка:
    ```bash
-   docker compose -f docker-compose.yml -f docker-compose.prod.yml exec web python manage.py check_deploy
+   ./compose.sh prod exec web python manage.py check_deploy
    curl http://localhost/health/
    ```
 3. Telegram (если нужен):
    ```bash
-   docker compose -f docker-compose.yml -f docker-compose.prod.yml exec web python manage.py register_telegram_webhook
+   ./compose.sh prod exec web python manage.py register_telegram_webhook
    ```
 
 ## HTTPS (Let's Encrypt / Cloudflare)
@@ -50,7 +53,7 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
    CSRF_TRUSTED_ORIGINS=https://ваш-домен.com
    ASSISTANT_PUBLIC_URL=https://ваш-домен.com
    ```
-3. Перезапуск: `docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d`
+3. Перезапуск: `./compose.sh prod up -d`
 
 Nginx слушает порт **80**. TLS обычно настраивают на внешнем reverse proxy или добавляют сертификаты в nginx.
 
@@ -70,8 +73,7 @@ Nginx слушает порт **80**. TLS обычно настраивают н
 
 ```bash
 git pull
-cd deploy
-docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+./compose.sh prod up -d --build
 ```
 
 Миграции выполняются автоматически при старте контейнера `web`.
@@ -82,8 +84,7 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 
 **С Docker (dev):**
 ```bash
-cd deploy
-docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+./compose.sh dev up --build
 ```
 Сайт: http://localhost:8080/
 
@@ -100,10 +101,21 @@ Webhook endpoints:
 
 ```bash
 # PostgreSQL
-docker compose -f docker-compose.yml -f docker-compose.prod.yml exec db \
-  pg_dump -U chaihana chaihana > backup.sql
+./compose.sh prod exec db pg_dump -U chaihana chaihana > backup.sql
 
 # Медиафайлы (volume media_files)
 docker run --rm -v deploy_media_files:/data -v $(pwd):/backup alpine \
   tar czf /backup/media-backup.tar.gz -C /data .
 ```
+
+## Справка по командам
+
+```bash
+./compose.sh prod ps              # статус контейнеров
+./compose.sh prod logs -f web     # логи
+./compose.sh prod down            # остановить
+./compose.sh prod down -v         # остановить и удалить volumes
+./compose.sh prod restart web     # перезапустить сервис
+```
+
+Файлы compose лежат в `deploy/` — менять их не нужно, работайте через `compose.sh`.

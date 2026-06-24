@@ -16,7 +16,9 @@ sakur_erp/
 ├── .env                   # переменные окружения (локально)
 ├── db.sqlite3             # БД в dev (создаётся после migrate)
 ├── run.ps1                # быстрый запуск на Windows
-└── deploy/                # Docker (опционально, для production)
+├── compose.sh             # Docker Compose из корня (Linux)
+├── up-prod.sh             # production deploy (Linux)
+└── deploy/                # docker-compose файлы (не заходить вручную)
 ```
 
 ## Локальный запуск (без Docker)
@@ -73,12 +75,25 @@ Celery worker **не нужен** — см. `docs/AI_ASSISTANT.md`
 Шаблон `.env`: `copy .env.prod.example .env`  
 **Redis + Celery worker обязательны.**
 
+Все Docker-команды — **из корня проекта** (папку `deploy/` открывать не нужно):
+
+```bash
+# Linux — первый деплой
+chmod +x compose.sh up-prod.sh
+./up-prod.sh
+
+# Любые команды compose
+./compose.sh prod ps
+./compose.sh prod logs -f web
+./compose.sh prod exec web python manage.py createsuperuser
+```
+
 ```powershell
 # Windows
-.\deploy\up-prod.ps1
+.\up-prod.ps1
 
-# Linux
-chmod +x deploy/up-prod.sh && ./deploy/up-prod.sh
+.\compose.ps1 prod ps
+.\compose.ps1 prod exec web python manage.py createsuperuser
 ```
 
 Проверка перед деплоем:
