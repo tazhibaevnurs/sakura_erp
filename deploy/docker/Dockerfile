@@ -11,7 +11,7 @@ FROM python:3.12-slim AS production
 WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq5 libcairo2 libpango-1.0-0 libgdk-pixbuf-2.0-0 \
-    postgresql-client \
+    postgresql-client gosu \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=builder /install /usr/local
 COPY manage.py /app/
@@ -24,7 +24,6 @@ RUN chmod +x /entrypoint.sh
 RUN useradd --system --no-create-home --shell /usr/sbin/nologin chaihana && \
     mkdir -p /app/staticfiles /app/media /app/celerybeat && \
     chown -R chaihana:chaihana /app
-USER chaihana
 EXPOSE 8000
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "3"]
