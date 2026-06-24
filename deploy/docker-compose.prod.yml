@@ -15,9 +15,14 @@ services:
 
   celery-beat:
     restart: unless-stopped
+    volumes:
+      - celerybeat_data:/app/celerybeat
 
   db:
     restart: unless-stopped
 
   redis:
     restart: unless-stopped
+
+volumes:
+  celerybeat_data:

@@ -22,7 +22,7 @@ COPY static/ /app/static/
 COPY deploy/docker/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 RUN useradd --no-create-home --no-login chaihana && \
-    mkdir -p /app/staticfiles /app/media && \
+    mkdir -p /app/staticfiles /app/media /app/celerybeat && \
     chown -R chaihana:chaihana /app
 USER chaihana
 EXPOSE 8000

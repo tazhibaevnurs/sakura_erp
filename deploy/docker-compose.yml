@@ -111,7 +111,7 @@ services:
     environment:
       DJANGO_SETTINGS_MODULE: config.settings.prod
       RUN_BOOTSTRAP: "0"
-    command: celery -A config beat -l info
+    command: celery -A config beat -l info --schedule /app/celerybeat/celerybeat-schedule
     depends_on:
       redis:
         condition: service_healthy

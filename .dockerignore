@@ -6,6 +6,9 @@ db.sqlite3
 staticfiles
 media
 .pytest_cache
-deploy
+# В образ нужен только entrypoint; nginx монтируется volume-ом
+deploy/**
+!deploy/docker
+!deploy/docker/entrypoint.sh
 .vscode
 *.md
