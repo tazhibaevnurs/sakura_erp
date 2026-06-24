@@ -21,7 +21,7 @@ COPY templates/ /app/templates/
 COPY static/ /app/static/
 COPY deploy/docker/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
-RUN useradd --no-create-home --no-login chaihana && \
+RUN useradd --system --no-create-home --shell /usr/sbin/nologin chaihana && \
     mkdir -p /app/staticfiles /app/media /app/celerybeat && \
     chown -R chaihana:chaihana /app
 USER chaihana
