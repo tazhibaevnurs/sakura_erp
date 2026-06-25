@@ -20,8 +20,10 @@ class Command(BaseCommand):
         if settings.DEBUG:
             warnings.append("DJANGO_DEBUG=True — на сервере должно быть False.")
 
-        if not settings.ALLOWED_HOSTS or settings.ALLOWED_HOSTS == ["localhost", "127.0.0.1"]:
-            errors.append("DJANGO_ALLOWED_HOSTS: укажите домен сервера.")
+        _internal = {"localhost", "127.0.0.1", "web"}
+        public_hosts = [h for h in settings.ALLOWED_HOSTS if h not in _internal]
+        if not public_hosts:
+            errors.append("DJANGO_ALLOWED_HOSTS: укажите домен или IP сервера.")
 
         use_https = getattr(settings, "USE_HTTPS", False)
         if use_https and not getattr(settings, "CSRF_TRUSTED_ORIGINS", []):

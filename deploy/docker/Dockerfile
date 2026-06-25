@@ -20,6 +20,7 @@ COPY apps/ /app/apps/
 COPY templates/ /app/templates/
 COPY static/ /app/static/
 COPY deploy/docker/entrypoint.sh /entrypoint.sh
+COPY deploy/docker/healthcheck.py /app/healthcheck.py
 RUN chmod +x /entrypoint.sh
 RUN useradd --system --no-create-home --shell /usr/sbin/nologin chaihana && \
     mkdir -p /app/staticfiles /app/media /app/celerybeat && \

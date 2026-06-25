@@ -9,6 +9,11 @@ from .base import *  # noqa: F403
 
 DEBUG = env.bool("DJANGO_DEBUG", default=False)  # noqa: F405
 
+# Docker healthcheck и nginx внутри сети compose (Host: localhost / web)
+for _host in ("localhost", "127.0.0.1", "web"):
+    if _host not in ALLOWED_HOSTS:  # noqa: F405
+        ALLOWED_HOSTS.append(_host)  # noqa: F405
+
 # Асинхронные задачи через Redis (настройки брокера — в base.py)
 CELERY_TASK_ALWAYS_EAGER = False
 CELERY_TASK_EAGER_PROPAGATES = False

@@ -10,5 +10,6 @@ media
 deploy/**
 !deploy/docker
 !deploy/docker/entrypoint.sh
+!deploy/docker/healthcheck.py
 .vscode
 *.md

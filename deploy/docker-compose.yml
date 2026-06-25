@@ -43,16 +43,15 @@ services:
     expose:
       - "8000"
     healthcheck:
+      # Только порт gunicorn — не зависит от ALLOWED_HOSTS и файлов в образе
       test:
         [
-          "CMD",
-          "python",
-          "-c",
-          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/')",
+          "CMD-SHELL",
+          "python -c \"import socket; s=socket.create_connection(('127.0.0.1', 8000), 3); s.close()\"",
         ]
-      interval: 30s
-      timeout: 10s
-      retries: 5
+      interval: 10s
+      timeout: 5s
+      retries: 12
       start_period: 120s
 
   daphne:
@@ -82,7 +81,7 @@ services:
       - media_files:/app/media:ro
     depends_on:
       web:
-        condition: service_healthy
+        condition: service_started
       daphne:
         condition: service_started
 
@@ -99,8 +98,6 @@ services:
       db:
         condition: service_healthy
       redis:
-        condition: service_healthy
-      web:
         condition: service_healthy
 
   celery-beat:

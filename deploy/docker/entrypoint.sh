@@ -15,6 +15,18 @@ fix_volume_permissions() {
   fi
 }
 
+# localhost/127.0.0.1/web — для healthcheck и nginx внутри Docker
+case ",${DJANGO_ALLOWED_HOSTS:-}," in
+  *",localhost,"*) ;;
+  *)
+    if [ -n "${DJANGO_ALLOWED_HOSTS:-}" ]; then
+      export DJANGO_ALLOWED_HOSTS="${DJANGO_ALLOWED_HOSTS},localhost,127.0.0.1,web"
+    else
+      export DJANGO_ALLOWED_HOSTS="localhost,127.0.0.1,web"
+    fi
+    ;;
+esac
+
 if [ "${RUN_BOOTSTRAP:-0}" != "1" ]; then
   fix_volume_permissions
   if [ "$(id -u)" = "0" ]; then
