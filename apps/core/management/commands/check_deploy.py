@@ -42,6 +42,21 @@ class Command(BaseCommand):
         ai_cfg = getattr(settings, "AI_ASSISTANT", {})
         if not ai_cfg.get("OPENAI_API_KEY") and not ai_cfg.get("GEMINI_API_KEY"):
             warnings.append("Не задан OPENAI_API_KEY / GEMINI_API_KEY — ИИ-ассистент отключён.")
+        elif ai_cfg.get("PROVIDER") == "openai":
+            openai_key = ai_cfg.get("OPENAI_API_KEY", "")
+            base_url = ai_cfg.get("OPENAI_BASE_URL", "")
+            model = ai_cfg.get("MODEL", "")
+            if openai_key.startswith("sk-or-") and not base_url:
+                warnings.append(
+                    "Ключ OpenRouter (sk-or-…), но OPENAI_BASE_URL пуст — "
+                    "добавьте OPENAI_BASE_URL=https://openrouter.ai/api/v1 "
+                    "(или обновите код с автоопределением)."
+                )
+            if model.startswith("gemini"):
+                warnings.append(
+                    f"AI_PROVIDER=openai, но AI_MODEL={model} — "
+                    "укажите openai/gpt-4o-mini или gpt-4o-mini."
+                )
 
         for msg in warnings:
             self.stdout.write(self.style.WARNING(f"WARN: {msg}"))

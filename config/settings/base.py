@@ -50,13 +50,16 @@ INSTALLED_APPS = [
 ASSISTANT_AI_API_KEY = env("ASSISTANT_AI_API_KEY", default="")
 ASSISTANT_GEMINI_API_KEY = env("ASSISTANT_GEMINI_API_KEY", default="")
 
+_AI_PROVIDER = env("AI_PROVIDER", default="gemini").lower()
+_AI_DEFAULT_MODEL = "openai/gpt-4o-mini" if _AI_PROVIDER == "openai" else "gemini-2.5-flash"
+
 AI_ASSISTANT = {
-    "PROVIDER": env("AI_PROVIDER", default="gemini"),
+    "PROVIDER": _AI_PROVIDER,
     "GEMINI_API_KEY": env("GEMINI_API_KEY", default=env("ASSISTANT_GEMINI_API_KEY", default="")),
     "OPENAI_API_KEY": env("OPENAI_API_KEY", default=env("ASSISTANT_AI_API_KEY", default="")),
     "OPENAI_BASE_URL": env("OPENAI_BASE_URL", default=""),
     "OPENROUTER_HTTP_REFERER": env("OPENROUTER_HTTP_REFERER", default=""),
-    "MODEL": env("AI_MODEL", default="gemini-2.5-flash"),
+    "MODEL": env("AI_MODEL", default=_AI_DEFAULT_MODEL),
     "MAX_TOKENS": 500,
     "TEMPERATURE": 0.7,
     "HISTORY_LIMIT": 15,

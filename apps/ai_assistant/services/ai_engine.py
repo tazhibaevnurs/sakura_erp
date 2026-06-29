@@ -35,6 +35,9 @@ class AIEngine:
             if not api_key:
                 raise AIEngineError("OPENAI_API_KEY не настроен.")
             base_url = cfg.get("OPENAI_BASE_URL", "") or None
+            if not base_url and api_key.startswith("sk-or-"):
+                base_url = "https://openrouter.ai/api/v1"
+                logger.info("OpenRouter key detected — using %s", base_url)
             default_headers = {}
             if base_url and "openrouter.ai" in base_url:
                 referer = cfg.get("OPENROUTER_HTTP_REFERER") or "https://sakura.local"
@@ -47,7 +50,18 @@ class AIEngine:
                 base_url=base_url,
                 default_headers=default_headers or None,
             )
-            self.model = cfg.get("MODEL", "gpt-4o-mini")
+            default_model = (
+                "openai/gpt-4o-mini"
+                if base_url and "openrouter.ai" in base_url
+                else "gpt-4o-mini"
+            )
+            self.model = cfg.get("MODEL") or default_model
+            if base_url and "openrouter.ai" in base_url and self.model.startswith("gemini"):
+                logger.warning(
+                    "AI_MODEL=%s не подходит для OpenRouter, используем openai/gpt-4o-mini",
+                    self.model,
+                )
+                self.model = "openai/gpt-4o-mini"
         else:
             api_key = cfg.get("GEMINI_API_KEY", "")
             if not api_key:
